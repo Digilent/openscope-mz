@@ -25,3 +25,6 @@ Precompiled binaries available [here](https://reference.digilentinc.com/referenc
 
 ### Feedback and Support
 [Digilent Forums - WaveForms Live and OpenScope MZ](https://forum.digilentinc.com/forum/30-waveforms-live-and-openscope-mz/)
+
+### Credits
+Author: Keith Vogel
