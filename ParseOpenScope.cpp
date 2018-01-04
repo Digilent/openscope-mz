@@ -16,12 +16,6 @@
 //#define JUST_LEX_JSON
 
 /************************************************************************/
-/*    RFC 7159 say JSON-text = ws value ws                              */
-/*    however JSON-text = ws object ws                                  */
-/*    is a valid subset that we are going to adhear to.                 */
-/************************************************************************/
-
-/************************************************************************/
 /*    To Be Removed, replaced new stings                                */
 /************************************************************************/
 static const char szTriggerDelay[]      = ",\"triggerDelay\":";
@@ -54,15 +48,30 @@ static const char szCh2Object[]     = "\"2\":{";
 
 // this must follow what is in the OPEN_SCOPE_STATES enum
 static char const * const rgInstrumentStates[] = {"\"idle\"", "\"armed\"", "\"acquiring\"", "\"triggered\"", "\"stopped\"", "\"running\"", "\"busy\""};
+static char const * const rgszSTCD[] = {"\"NORMAL\"", "\"FORCED\"", "\"ERROR\"", "\"OVERFLOW\"", "\"UNKNOWN\""};
 
 // must follow TRGTP enum
 static char const * const rgThresholdType[] = {"\"none\"", "\"risingEdge\"", "\"fallingEdge\""};
+
+char const * const rgOVFNames[VOLEND] = {"NONE", "stop", "circular"};
+
 
 // some common strings
 static const char szActualVOffset[]     = ",\"actualVOffset\":";
 static const char szActualGain[]        = ",\"actualGain\":";
 static const char szActualSampleFreq[]  = ",\"actualSampleFreq\":";
+static const char szActualCount[]       = ",\"actualCount\":";
+static const char szStartIndex[]        = ",\"startIndex\":";
+static const char szStopReason[]        = ",\"stopReason\":";
+static const char szMaxSampleCount[]    = ",\"maxSampleCount\":";
 static const char szActualFreq[]        = ",\"actualSignalFreq\":";
+static const char szActualFilePosition[] = ",\"actualFilePosition\":";
+static const char szActualFileSize[]    = ",\"actualFileSize\":";
+static const char szActualLength[]      = ",\"actualLength\":";
+static const char szActualStartDelay[]  = ",\"actualStartDelay\":";
+static const char szStorageLocation[]   = ",\"storageLocation\":\"";
+static const char szOverflow[]          = ",\"overflow\":\"";
+static const char szURI[]               = ",\"uri\":\"";
 static const char szVpp[]               = ",\"actualVpp\":";
 static const char szAcqCount[]          = ",\"acqCount\":";
 static const char szBitMask[]           = ",\"bitmask\":";
@@ -78,6 +87,7 @@ static const char szLa[]                = "\"la\"";
 static const char szForce[]             = "\"force\"";
 static const char szChannel[]           = ",\"channel\":";
 static const char szType[]              = ",\"type\":";
+static const char szFilePath[]          = ",\"path\":";
 static const char szState[]             = ",\"state\":";
 static const char szLowerThreshold[]    = ",\"lowerThreshold\":";
 static const char szUpperThreshold[]    = ",\"upperThreshold\":";
@@ -93,11 +103,20 @@ static const char szWaitUntil[]         = ",\"wait\":-1}";
 
 static const char szStatusCode[] = "{\"statusCode\":";
 static const char szCharLocation[] = ",\"Char Location\":";
-static const char szEndError[] = "}\r\n";
+static const char szEndError[] = "}";
 
-static const char szSetParmStatusCode[]  = "{\"command\":\"setParameters\",\"statusCode\":";
-static const char szReadStatusCode[]     = " {\"command\":\"read\",\"statusCode\":";
-static const char szGetCurrentStateStatusCode[] = " {\"command\":\"getCurrentState\",\"statusCode\":";
+static const char szSetParmStatusCode[]         = "{\"command\":\"setParameters\",\"statusCode\":";
+static const char szReadStatusCode[]            = "{\"command\":\"read\",\"statusCode\":";
+static const char szListdirStatusCode[]         = "{\"command\":\"listdir\",\"statusCode\":";
+static const char szDeleteStatusCode[]          = "{\"command\":\"delete\",\"statusCode\":";
+static const char szMkDirStatusCode[]           = "{\"command\":\"mkdir\",\"statusCode\":";
+static const char szWriteStatusCode[]           = "{\"command\":\"write\",\"statusCode\":";
+static const char szGetFileSizeStatusCode[]     = "{\"command\":\"getFileSize\",\"statusCode\":";
+static const char szGetCurrentStateStatusCode[] = "{\"command\":\"getCurrentState\",\"statusCode\":";
+static const char szRunStatus[]                 = "{\"command\":\"run\",\"statusCode\":";
+static const char szStopStatus[]                = "{\"command\":\"stop\",\"statusCode\":";
+
+static const char szTerminateChunk[] = "\r\n0\r\n\r\n";
 
 // Mode strings
 static const char szJSON[]          = "JSON";
@@ -106,6 +125,8 @@ static const char szMode[]          = "\"mode\":\"";
 
 // Device strings
 static const char szDevice[] = "\"device\":[";
+static const char szFileArray[] = "\"file\":[";
+static const char szFilesArray[] = ",\"files\":[";
 
 static const char szEnumeration1[] = "\
 {\
@@ -118,9 +139,18 @@ static const char szEnumeration1[] = "\
 
 static const char szEnumeration2[] = "\
 },\
+\"macAddress\":\"";
+
+static const char szEnumeration3[] = "\
+\",\
 \"calibrationSource\":\"";
 
-static const char szEnumeration3[] = "\",\
+static const char szEnumeration4[] = "\
+\",\
+\"nics\":{\
+\"wlan0\":{\"macAddress\":\"";
+
+static const char szEnumeration5[] = "\"}},\
 \"requiredCalibrationVer\":" MKSTR(CALVER) ",\
 \"requiredWiFiParameterVer\":" MKSTR(WFVER) ",\
 \"awg\":{\
@@ -133,33 +163,43 @@ static const char szEnumeration3[] = "\",\
 \"triangle\",\
 \"dc\"\
 ],\
-\"signalFreqMin\":62,\
+\"signalFreqUnits\":0.001,\
+\"signalFreqMin\":50,\
 \"signalFreqMax\":1000000000,\
 \"dataType\":\"I16\",\
 \"bufferSizeMax\":32766,\
-\"dacVpp\":3000,\
+\"sampleFreqUnits\":0.001,\
 \"sampleFreqMin\":1000000,\
 \"sampleFreqMax\":10000000000,\
+\"voltageUnits\":0.001,\
+\"dacVpp\":3000,\
 \"vOffsetMin\":-1500,\
 \"vOffsetMax\":1500,\
 \"vOutMin\":-3000,\
-\"vOutMax\":3000\
+\"vOutMax\":3000,\
+\"currentUnits\":0.001,\
+\"currentMin\":0,\
+\"currentMax\":20\
 }\
 },\
 \"dc\":{\
 \"numChans\":2,\
 \"1\":{\
+\"voltageUnits\":0.001,\
 \"voltageMin\":-4000,\
 \"voltageMax\":4000,\
 \"voltageIncrement\":40,\
+\"currentUnits\":0.001,\
 \"currentMin\":0,\
 \"currentMax\":50,\
 \"currentIncrement\":0\
 },\
 \"2\":{\
+\"voltageUnits\":0.001,\
 \"voltageMin\":-4000,\
 \"voltageMax\":4000,\
 \"voltageIncrement\":40,\
+\"currentUnits\":0.001,\
 \"currentMin\":0,\
 \"currentMax\":50,\
 \"currentIncrement\":0\
@@ -167,6 +207,7 @@ static const char szEnumeration3[] = "\",\
 },\
 \"gpio\":{\
 \"numChans\": 10,\
+\"currentUnits\":0.001,\
 \"sourceCurrentMax\": 7000,\
 \"sinkCurrentMax\": 12000\
 },\
@@ -176,9 +217,13 @@ static const char szEnumeration3[] = "\",\
 \"bufferDataType\":\"U16\",\
 \"numDataBits\": 10,\
 \"bitmask\": 1023,\
+\"bufferSizeMax\": 32638,\
+\"sampleFreqUnits\":0.001,\
 \"sampleFreqMin\": 6000,\
-\"sampleFreqMax\": 6250000000,\
-\"bufferSizeMax\": 32638\
+\"sampleFreqMax\": 10000000000,\
+\"delayUnits\":0.000000000001,\
+\"delayMax\":4611686018427387904,\
+\"delayMin\":-32640000000000000\
 }\
 },\
 \"osc\":{\
@@ -188,10 +233,13 @@ static const char szEnumeration3[] = "\",\
 \"effectiveBits\":11,\
 \"bufferSizeMax\":32638,\
 \"bufferDataType\":\"I16\",\
+\"sampleFreqUnits\":0.001,\
 \"sampleFreqMin\":6000,\
 \"sampleFreqMax\":6250000000,\
+\"delayUnits\":0.000000000001,\
 \"delayMax\":4611686018427387904,\
 \"delayMin\":-32640000000000000,\
+\"voltageUnits\":0.001,\
 \"adcVpp\":3000,\
 \"inputVoltageMax\":20000,\
 \"inputVoltageMin\":-20000,\
@@ -207,10 +255,13 @@ static const char szEnumeration3[] = "\",\
 \"effectiveBits\":11,\
 \"bufferSizeMax\":32640,\
 \"bufferDataType\":\"I16\",\
+\"sampleFreqUnits\":0.001,\
 \"sampleFreqMin\":6000,\
 \"sampleFreqMax\":6250000000,\
+\"delayUnits\":0.000000000001,\
 \"delayMax\":4611686018427387904,\
 \"delayMin\":-32640000000000000,\
+\"voltageUnits\":0.001,\
 \"adcVpp\":3000,\
 \"inputVoltageMax\":20000,\
 \"inputVoltageMin\":-20000,\
@@ -220,6 +271,59 @@ static const char szEnumeration3[] = "\",\
 0.125,\
 0.075\
 ]\
+}\
+},\
+\"log\":{\
+\"analog\":{\
+\"fileFormat\":" MKSTR(LOGFMT) ",\
+\"fileRevision\":" MKSTR(LOGREV) ",\
+\"numChans\":2,\
+\"1\":{\
+\"resolution\":12,\
+\"effectiveBits\":12,\
+\"bufferSizeMax\":32702,\
+\"fileSamplesMax\":" MKSTR(LOGMAXFILESAMP) ",\
+\"sampleDataType\":\"I16\",\
+\"sampleFreqUnits\":0.000001,\
+\"sampleFreqMin\":1,\
+\"sampleFreqMax\":50000000000,\
+\"delayUnits\":0.000000000001,\
+\"delayMax\":9223372036854775807,\
+\"delayMin\":0,\
+\"voltageUnits\":0.001,\
+\"adcVpp\":3000,\
+\"inputVoltageMax\":20000,\
+\"inputVoltageMin\":-20000,\
+\"gains\":[\
+1,\
+0.25,\
+0.125,\
+0.075\
+]\
+},\
+\"2\":{\
+\"resolution\":12,\
+\"effectiveBits\":12,\
+\"bufferSizeMax\":32702,\
+\"fileSamplesMax\":" MKSTR(LOGMAXFILESAMP) ",\
+\"sampleDataType\":\"I16\",\
+\"sampleFreqUnits\":0.000001,\
+\"sampleFreqMin\":1,\
+\"sampleFreqMax\":50000000000,\
+\"delayUnits\":0.000000000001,\
+\"delayMax\":9223372036854775807,\
+\"delayMin\":0,\
+\"voltageUnits\":0.001,\
+\"adcVpp\":3000,\
+\"inputVoltageMax\":20000,\
+\"inputVoltageMin\":-20000,\
+\"gains\":[\
+1,\
+0.25,\
+0.125,\
+0.075\
+]\
+}\
 }\
 }\
 }";
@@ -246,10 +350,21 @@ static const char szEnterBootloader[] = "\
 \"wait\":1000\
 }";
 
-static const char szAveLoopTime1[] = "\
+static const char szLoopStats[] = "\
 {\
-\"command\":\"aveLoopTime\",\
+\"command\":\"loopStats\",\
 \"uSecAveTime\":";
+
+static const char szMinLoopTime[] = ",\"uSecMinLoopTime\":";
+static const char szMaxLoopTime[] = ",\"uSecMaxLoopTime\":";
+static const char szLastCommandTime[] = ",\"uSecLastCommandTime\":";
+static const char szAveLogCnt[] = ",\"aveLogWrite\":";
+static const char szMaxLogCnt[] = ",\"maxLogBackLog\":";
+static const char szMaxLogWrittenCnt[] = ",\"maxLogWrite\":";
+
+
+static const char szMaxSDBusyTime[] = ",\"uSecMaxSDBusy\":";
+static const char szMaxInARowBusy[] = ",\"maxBusyInARow\":";
 
 static const char szStatus0Wait0[] = "\
 ,\"statusCode\":0,\
@@ -298,6 +413,8 @@ static IAWG     iawgT       = pjcmd.iawg;
 static IOSC     ioscT       = pjcmd.ioscCh1;
 static ILA      ilaT        = pjcmd.ila;
 static IWIFI    iWiFiT      = pjcmd.iWiFi;
+static IALOG    iALogT      = pjcmd.iALog1;
+static IFILE    iFileT      = uicmd.iFile;
 static uint32_t iBinOffset = 0;
 
 // token mapping
@@ -310,6 +427,8 @@ static const OSPAR::STRU32 rgStrU32Endpoint[] = {
                                                     {"osc",         OSPAROscChannelObject}, 
                                                     {"la",          OSPARLaChannelObject}, 
                                                     {"gpio",        OSPARGpioChannelObject}, 
+                                                    {"log",         OSPARLogObject}, 
+                                                    {"file",        OSPARFileArray}, 
                                                     {"mode",        OSPARMode},
                                                     {"debugPrint",  OSPARDebugPrint},
                                                     {"test",        OSPARTestArray},
@@ -339,7 +458,7 @@ static const OSPAR::STRU32 rgStrU32DeviceCmd[]  = {
                                                     {"enumerate", OSPARDeviceEnmerate}, 
                                                     {"firmware", Unimplemented}, 
                                                     {"enterBootloader", OSPARDeviceEnterBootloader},
-                                                    {"aveLoopTime", OSPARDeviceAveLoopTime},
+                                                    {"loopStats", OSPARDeviceLoopStats},
                                                     {"storageGetLocations", OSPARDeviceStorageGetLocations}, 
                                                     {"calibrationGetStorageTypes", OSPARDeviceCalibrationGetTypes}, 
                                                     {"calibrationGetInstructions", OSPARDeviceCalibrationGetInstructions}, 
@@ -360,6 +479,29 @@ static const OSPAR::STRU32 rgStrU32DeviceCmd[]  = {
                                                     {"wifiListSavedParameters", OSPARDeviceWiFiListSavedParameters},     
                                                     {"resetInstruments", OSPARDeviceResetInstruments}   
                                                 };
+
+
+// File strings
+static const OSPAR::STRU32 rgStrU32File[]     = {     
+                                                    {"command", OSPARFileCmd}, 
+                                                    {"type", OSPARFileStorageType}, 
+                                                    {"path", OSPARFilePath},
+                                                    {"filePosition", OSPARFilePostion},
+                                                    {"requestedLength", OSPARFileRequestedLength},
+                                                    {"binaryLength", OSPARFileBinaryLength},
+                                                    {"binaryOffset", OSPARFileBinaryOffset}
+                                                };
+
+static const OSPAR::STRU32 rgStrU32FileCmd[]  = {
+                                                    {"read", OSPARFileRead}, 
+                                                    {"write", OSPARFileWrite}, 
+                                                    {"mkdir", OSPARFileMkdir},
+                                                    {"delete", OSPARFileDelete},
+                                                    {"getFileSize", OSPARFileGetFileSize},
+                                                    {"listdir", OSPARFileListdir}
+                                                };
+
+
 // Device strings
 static const char szDeviceDcCh1[]       = "\"dc\":{\"numChans\":2,\"1\":{\"source\":\"";
 
@@ -426,7 +568,7 @@ static const OSPAR::STRU32 rgStrU32DeviceSecurityType[]  = {    {"open", DEWF_SE
                                                                 {"wpa2", DEWF_SECURITY_WPA2_WITH_KEY}
                                                             };
 static const OSPAR::STRU32 rgStrU32DeviceWorkingParameterSet[]  = {{"activeParameterSet", false}, {"workingParameterSet", true}};
-static const OSPAR::STRU32 rgStrU32DeviceStorageLocation[]      = {{"flash", VOLFLASH}, {"sd0", VOLSD}};
+static const OSPAR::STRU32 rgStrU32FileVol[] = {{"sd0", VOLSD}, {"flash", VOLFLASH}, {"ram", VOLRAM}, {"cloud", VOLCLOUD}};
 static const char szDeviceWiFiSaveParameters[]  = "{\"command\":\"wifiSaveParameters\",\"statusCode\":";
 static const char szDeviceWiFiLoadParameters[]  = "{\"command\":\"wifiLoadParameters\",\"statusCode\":";
 static const char szDeviceWiFiDeleteParameters[]  = "{\"command\":\"wifiDeleteParameters\",\"statusCode\":";
@@ -449,17 +591,25 @@ static const OSPAR::STRU32 rgStrU32DcCmd[]      = {{"getVoltage", OSPARDcGetVolt
 // AWG Strings
 static const char szAwgObject[]                 = "\"awg\":{";
 static const char szAwgSetRegWaveStatus[]       = "{\"command\":\"setRegularWaveform\",\"statusCode\":";
-static const char szAwgRunStatus[]              = "{\"command\":\"run\",\"statusCode\":";
-static const char szAwgStopStatus[]             = "{\"command\":\"stop\",\"statusCode\":";
-static const char szAwgGetCurrentStateStatus[]  = "{\"command\":\"getCurrentState\",\"statusCode\":";
 static const char szAwgWaveType[]               = ",\"waveType\":\"";
 
 // awg
 static const OSPAR::STRU32 rgStrU32AwgChannel[] = {{"1", OSPARAwgCh1}};
-static const OSPAR::STRU32 rgStrU32Awg[] = {{"command", OSPARAwgCmd}, {"signalType", OSPARAwgSignalType}, {"signalFreq", OSPARAwgSignalFreq}, {"vpp", OSPARAwgVP2P}, {"vOffset", OSPARAwgOffset}, {"dutyCycle", OSPARAwgDutyCycle}};
-static const OSPAR::STRU32 rgStrU32AwgCmd[] = {{"setRegularWaveform", OSPARAwgSetRegularWaveform}, {"getCurrentState", OSPARAwgGetCurrentState}, {"run", OSPARAwgRun}, {"stop", OSPARAwgStop}};
+static const OSPAR::STRU32 rgStrU32Awg[]        = {{"command", OSPARAwgCmd}, {"signalType", OSPARAwgSignalType}, {"signalFreq", OSPARAwgSignalFreq}, {"vpp", OSPARAwgVP2P}, {"vOffset", OSPARAwgOffset}, {"dutyCycle", OSPARAwgDutyCycle}};
+static const OSPAR::STRU32 rgStrU32AwgCmd[]     = {{"setRegularWaveform", OSPARAwgSetRegularWaveform}, {"getCurrentState", OSPARAwgGetCurrentState}, {"run", OSPARAwgRun}, {"stop", OSPARAwgStop}};
 static const OSPAR::STRU32 rgStrU32AwgSignalType[] = {{"sine", waveSine}, {"square", waveSquare}, {"sawtooth", waveSawtooth}, {"triangle", waveTriangle}, {"dc", waveDC}, {"arbitrary", waveArbitrary}};
-char const * const rgszAwgWaveforms[] = {"none", "dc", "sine", "square", "triangle", "sawtooth", "arbitrary"};
+char const * const rgszAwgWaveforms[]           = {"none", "dc", "sine", "square", "triangle", "sawtooth", "arbitrary"};
+
+// log
+static const OSPAR::STRU32 rgStrU32LogObject[]          = {{"analog", OSPARLogAnalog}, {"digital", OSPARLogDigital}};
+static const OSPAR::STRU32 rgStrU32logAnalogChannel[]   = {{"1", OSPARLogAnalogCh1}, {"2", OSPARLogAnalogCh2}};
+static const OSPAR::STRU32 rgStrU32logDigitalChannel[]  = {{"1", OSPARLogDigitalCh1}};
+static const OSPAR::STRU32 rgStrU32logAnalog[]          = {{"command", OSPARLogAnalogCmd}, {"maxSampleCount", OSPARLogMaxSampleCount}, {"gain", OSPARLogSetGain}, {"vOffset", OSPARLogSetOffset}, {"sampleFreq", OSPARLogSetSampleFreq}, {"startDelay", OSPARLogStartDelay}, {"overflow", OSPARLogOverflow}, {"storageLocation", OSPARLogStorageLocation}, {"uri", OSPARLogURI}, {"startIndex", OSPARLogStartIndex}, {"count", OSPARLogCount}};
+static const OSPAR::STRU32 rgStrU32LogCmd[]             = {{"setParameters", OSPARLogAnalogSetParams}, {"getCurrentState", OSPARLogGetCurrentState}, {"run", OSPARLogRun}, {"read", OSPARLogRead}, {"stop", OSPARLogStop}};
+static const OSPAR::STRU32 rgStrU32LogOverflow[]        = {{"circular", OVFCircular}, {"stop", OVFStop}};
+static const char szLogObject[]                         = "\"log\":{";
+static const char szLogAnalogObject[]                   = "\"analog\":{";
+static const char szLogDigitalObject[]                  = "\"digital\":{";
 
 // OSC Strings
 static const char szOscObject[]             = "\"osc\":{";
@@ -523,110 +673,6 @@ static const char szTestRun[]         = "{\"command\":\"run\",\"statusCode\":0,\
 
 #ifndef JUST_LEX_JSON
 
-uint32_t OSPAR::Uint32FromStr(STRU32 const * const rgStrU32L, uint32_t cStrU32L, char const * const sz, uint32_t cb, STATE defaultState)
-{
-    uint32_t i = 0;
-
-    for(i = 0; i < cStrU32L; i++)
-    {
-        if((strlen(rgStrU32L[i].szToken) == cb) && memcmp(sz, rgStrU32L[i].szToken, cb) == 0)
-        {
-            return(rgStrU32L[i].u32);
-        }
-    }
-
-    return(defaultState);
-}
-
-GCMD::ACTION OSPAR::StreamJSON(char const * szStream, uint32_t cbStream)
-{
-    // if we are not given any data, this is a streaming error
-    if(cbStream == 0)
-    {
-        // Error Code
-        strcpy(rgchOut, szStatusCode);
-        odata[0].cb = sizeof(szStatusCode)-1;
-        utoa(EndOfStream, &rgchOut[odata[0].cb], 10);
-        odata[0].cb = strlen(rgchOut);
-
-        // location
-        memcpy(&rgchOut[odata[0].cb], szCharLocation, sizeof(szCharLocation)-1);
-        odata[0].cb += sizeof(szCharLocation)-1;
-        itoa(cbProcessed + iBuf, &rgchOut[odata[0].cb], 10);
-        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
-                
-        // end the error code
-        memcpy(&rgchOut[odata[0].cb], szEndError, sizeof(szEndError)-1);
-        odata[0].cb += sizeof(szEndError)-1;
-
-        return(GCMD::ERROR);
-    }
-
-    // make sure we have stuff in our local buffer
-    else if(iBufMax < sizeof(szBuf) && (cbStream - iStream) > 0)
-    {
-        uint32_t cbAdd = min((cbStream - iStream), sizeof(szBuf) - iBufMax);
-        memcpy(&szBuf[iBufMax], &szStream[iStream], cbAdd);
-        iBufMax += cbAdd;
-        iStream += cbAdd;
-    }
-
-    // call the lexer
-    switch(LexJSON(&szBuf[iBuf], iBufMax - iBuf))
-    {
-        case GCMD::READ:
-            
-            // move things to skip
-            iBuf += szMoveInput - &szBuf[iBuf];
-
-            // shift to the begining of the buffer
-            memcpy(szBuf, &szBuf[iBuf], iBufMax -  iBuf);
-            iBufMax -= iBuf;
-            cbProcessed += iBuf;
-            iBuf = 0;
-
-            // we still have some bytes in the buffer
-            if((cbStream - iStream) > 0) return(GCMD::CONTINUE);
-
-            // we need more bytes
-            iStream = 0;
-            return(GCMD::READ);
-            break;
-
-        case GCMD::ERROR:
-
-            // Error Code
-            strcpy(rgchOut, szStatusCode);
-            odata[0].cb = sizeof(szStatusCode)-1;
-            utoa(tokenErrorState, &rgchOut[odata[0].cb], 10);
-            odata[0].cb = strlen(rgchOut);
-
-            // location
-            memcpy(&rgchOut[odata[0].cb], szCharLocation, sizeof(szCharLocation)-1);
-            odata[0].cb += sizeof(szCharLocation)-1;
-            itoa(cbProcessed + iBuf, &rgchOut[odata[0].cb], 10);
-            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
-                
-            // end the error code
-            memcpy(&rgchOut[odata[0].cb], szEndError, sizeof(szEndError)-1);
-            odata[0].cb += sizeof(szEndError)-1;
-    
-            return(GCMD::ERROR);
-            break;
-
-        case GCMD::DONE:
-            return(GCMD::DONE);
-            break;
-
-        default:
-            iBuf += szMoveInput - &szBuf[iBuf];
-            break;
-
-    }
-
-    return(GCMD::CONTINUE);
-}
-
 STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonToken)
 {
     STATE   curState = state;
@@ -663,6 +709,956 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
         {
 
             /************************************************************************/
+            /*    Data Logger                                                       */
+            /************************************************************************/
+            case OSPARLogObject:
+                if(jsonToken == tokObject)
+                {
+                    rgStrU32 = rgStrU32LogObject;
+                    cStrU32 = sizeof(rgStrU32LogObject) / sizeof(STRU32);
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szLogObject, sizeof(szLogObject)-1); 
+                    odata[0].cb += sizeof(szLogObject)-1;
+                    state = OSPARMemberName;
+                }
+                break;
+
+            case OSPARLogAnalog:
+                if(jsonToken == tokObject)
+                {
+                    rgStrU32 = rgStrU32logAnalogChannel;
+                    cStrU32 = sizeof(rgStrU32logAnalogChannel) / sizeof(STRU32);
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szLogAnalogObject, sizeof(szLogAnalogObject)-1); 
+                    odata[0].cb += sizeof(szLogAnalogObject)-1;
+                    stateEndObject = OSPARLogObjectEnd;
+                    state = OSPARMemberName;
+                }
+                break;
+
+            case OSPARLogAnalogCh1:
+                if(jsonToken == tokArray)
+                {
+                    memcpy(&iALogT, &pjcmd.iALog1, sizeof(iALogT)); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
+                    odata[0].cb += sizeof(szCh1Array)-1;
+
+                    iALogT.state.parsing = Idle;
+                    rgStrU32 = rgStrU32logAnalog;
+                    cStrU32 = sizeof(rgStrU32logAnalog) / sizeof(STRU32);
+                    stateEndArray = OSPARLogAnalogChEnd;
+                    stateEndObject = OSPARLogAnalogObjectEnd;
+                    state = OSPARSkipObject;
+                }
+                break;
+
+            case OSPARLogAnalogCh2:
+                if(jsonToken == tokArray)
+                {
+                    memcpy(&iALogT, &pjcmd.iALog2, sizeof(iALogT)); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szCh2Array, sizeof(szCh2Array)-1); 
+                    odata[0].cb += sizeof(szCh2Array)-1;
+
+                    iALogT.state.parsing = Idle;
+                    rgStrU32 = rgStrU32logAnalog;
+                    cStrU32 = sizeof(rgStrU32logAnalog) / sizeof(STRU32);
+                    stateEndArray = OSPARLogAnalogChEnd;
+                    stateEndObject = OSPARLogAnalogObjectEnd;
+                    state = OSPARSkipObject;
+                }
+                break;
+
+            case OSPARLogAnalogCmd:
+                if(jsonToken == tokStringValue)
+                {
+                    state = (STATE) Uint32FromStr(rgStrU32LogCmd, sizeof(rgStrU32LogCmd) / sizeof(STRU32), szToken, cbToken);
+                    stateValueSep = OSPARMemberName;
+                    fContinue = true;
+                }
+                break;
+
+            case OSPARLogGetCurrentState:
+            case OSPARLogAnalogSetParams:
+            case OSPARLogRead:
+            case OSPARLogRun:
+            case OSPARLogStop:
+                if(jsonToken == tokStringValue)
+                {
+                    iALogT.state.parsing = curState;
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogMaxSampleCount:
+                if(jsonToken == tokNumber)
+                {
+                    char szT[32];
+                    memcpy(szT, szToken, cbToken);
+                    szT[cbToken] = '\0';
+                    iALogT.maxSamples = atoll(szT);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+ 
+            case OSPARLogSetOffset:
+                if(jsonToken == tokNumber)
+                {
+                    char szT[32];
+                    memcpy(szT, szToken, cbToken);
+                    szT[cbToken] = '\0';
+                    iALogT.mvOffset = atoi(szT);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogSetGain:
+                if(jsonToken == tokNumber && cbToken < 32)
+                {
+                    state = OSPARSkipValueSep;
+                    if(cbToken == (sizeof(szGain1)-1) && strncmp(szGain1, szToken, (sizeof(szGain1)-1)) == 0) iALogT.gain = 1;
+                    else if(cbToken == (sizeof(szGain2)-1) && strncmp(szGain2, szToken, (sizeof(szGain2)-1)) == 0) iALogT.gain = 2;
+                    else if(cbToken == (sizeof(szGain3)-1) && strncmp(szGain3, szToken, (sizeof(szGain3)-1)) == 0) iALogT.gain = 3;
+                    else if(cbToken == (sizeof(szGain4)-1) && strncmp(szGain4, szToken, (sizeof(szGain4)-1)) == 0) iALogT.gain = 4;
+                    else state = OSPARSyntaxError;
+                }
+                break;
+
+            case OSPARLogSetSampleFreq:
+                if(jsonToken == tokNumber && cbToken <= 20)
+                {
+                    char szT[32];
+                    memcpy(szT, szToken, cbToken);
+                    szT[cbToken] = '\0';
+                    iALogT.bidx.xsps = atoll(szT);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogStartDelay:
+                if(jsonToken == tokNumber && cbToken <= 20)
+                {
+                    char szT[32];
+                    memcpy(szT, szToken, cbToken);
+                    szT[cbToken] = '\0';
+                    iALogT.bidx.psDelay = atoll(szT);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogOverflow:
+                if(jsonToken == tokStringValue)
+                {
+                    iALogT.overflow = (OVF) Uint32FromStr(rgStrU32LogOverflow, sizeof(rgStrU32LogOverflow) / sizeof(STRU32), szToken, cbToken, OVFStop);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogStorageLocation:
+                if(jsonToken == tokStringValue)
+                {
+                    iALogT.vol = (VOLTYPE) Uint32FromStr(rgStrU32FileVol, sizeof(rgStrU32FileVol) / sizeof(STRU32), szToken, cbToken, VOLSD);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogURI:
+                if(jsonToken == tokStringValue)
+                {
+                    if(cbToken > MAX_PATH) cbToken = MAX_PATH;
+                    memcpy(iALogT.szURI, szToken, cbToken);
+                    iALogT.szURI[cbToken] = '\0';
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogStartIndex:
+                if(jsonToken == tokNumber && cbToken < 32)
+                {
+                    char szT[32];
+                    memcpy(szT, szToken, cbToken);
+                    szT[cbToken] = '\0';
+                    iALogT.iStart = atoll(szT);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogCount:
+                if(jsonToken == tokNumber && cbToken < 32)
+                {
+                    char szT[32];
+                    memcpy(szT, szToken, cbToken);
+                    szT[cbToken] = '\0';
+                    iALogT.bidx.cBuff = atoi(szT);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogAnalogObjectEnd:
+                if(jsonToken == tokEndObject)
+                {  
+                    int i = 0;
+
+                    stateValueSep = OSPARSeparatedObject;
+                    state = OSPARSkipValueSep;
+
+                    switch(iALogT.state.parsing)
+                    {
+                        case OSPARLogAnalogSetParams:
+                            {
+                                FRESULT     fr      = FR_INVALID_NAME;
+                                IALOG&      iALog   = (iALogT.id == ALOG1_ID) ? pjcmd.iALog1 : pjcmd.iALog2;
+                                DFILE&      dFile   = *((DFILE *) iALog.pdFile);
+                                LogHeader   logHdr  = LogHeader();
+                                uint32_t    cbHdr   = 0;  
+
+                                // set parameters
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szSetParmStatusCode, sizeof(szSetParmStatusCode)-1); 
+                                odata[0].cb += sizeof(szSetParmStatusCode)-1;
+                                // Parameter Check
+
+                                // some parameter checks
+                                if( iALogT.bidx.cBuff != 0 || iALogT.bidx.xsps > LOGuSPS                                                            || 
+                                    iALogT.maxSamples < -1 || iALogT.maxSamples == 0 || (iALogT.vol == VOLSD && iALogT.maxSamples > LOGMAXFILESAMP) ||
+                                    (iALogT.maxSamples > 0 && ((iALogT.maxSamples * 1000000) / iALogT.bidx.xsps) >= LOGMAXSECDELAY)                 )
+                                {
+                                    utoa(ValueOutOfRange, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                }
+
+                                // see if we are in use
+                                else if(!(IsLogxIdle(iALog) && IsOSCIdle() && IsLAIdle()))
+                                {
+                                    // put out an error
+                                    utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                }
+
+                                // see if we need a file and open it
+                                else if(iALogT.vol == VOLSD && 
+                                    (   iALogT.szURI[0] == 0 || dFile ||
+                                        (fr = DFATFS::fschdrive(DFATFS::szFatFsVols[iALogT.vol]))                               != FR_OK    || 
+                                        (fr = DFATFS::fschdir(DFATFS::szRoot))                                                  != FR_OK    ||
+                                        (fr = dFile.fsopen(iALogT.szURI, FA_CREATE_ALWAYS | FA_WRITE))                          != FR_OK    ||
+                                        (fr = dFile.fswrite(&logHdr, sizeof(logHdr), &cbHdr, DFILE::FS_INFINITE_SECTOR_CNT))    != FR_OK    ))
+                                {                                   
+                                    utoa((CFGFileSystemError | fr), &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                    // close the file if it got opened.
+                                    if(dFile) dFile.fsclose();
+                                }
+
+                                else 
+                                {
+                                    // put in status code
+
+                                    // calculate the maxSample size
+                                    if(iALogT.vol == VOLRAM && iALogT.overflow == OVFStop && (iALogT.maxSamples == -1 || iALogT.maxSamples > LOGMAXBUFFSIZE)) iALogT.maxSamples = LOGMAXBUFFSIZE;
+
+                                    // calculate the maxSample size
+                                    // problem, at slow sample rates we can blow out the termination timer if we put a real value here.
+
+                                    // calculate actual usps and delay
+                                    iALogT.bidx.xsps = CalculatePreScalarAndPeriod(iALogT.bidx.xsps, 1000000, iALogT.bidx.pbClkSampTmr, &iALogT.bidx.tmrPreScalar, &iALogT.bidx.tmrPeriod, &iALogT.bidx.tmrCnt);
+
+                                    // calculate the actual delay in picoseconds                                    
+                                    iALogT.bidx.psDelay = GetPSFromTmrTicks(GetTmrTicksFromPS(iALogT.bidx.psDelay));
+
+                                    // looks good, set up for a logging
+                                    if(dFile) dFile.fsclose();
+
+                                    pchJSONRespBuff[odata[0].cb++] = '0';
+
+                                    // calculate actual offset
+                                    iALogT.mvOffset = OSCVinFromDadcGainOffset((((ALOG *) rgInstr[iALogT.id])->posc),  0, (iALogT.gain-1), iALogT.mvOffset);
+
+                                    // we want to set this to the Idle state so we 
+                                    // know to set up the instrument.
+                                    iALogT.state.processing = Waiting;
+
+                                    // just kill competing instruments
+                                    pjcmd.ioscCh1.state.processing  = Idle;
+                                    pjcmd.ioscCh2.state.processing  = Idle;
+                                    pjcmd.ila.state.processing      = Idle;
+
+                                    // copy over the current state into the object
+                                    memcpy(&iALog, &iALogT, sizeof(iALogT)); 
+
+                                    iALogT.state.parsing = OSPARLogAnalogCompleteParams;
+
+                                    // returning a non Idle, non-error will cause the parent
+                                    // state machines to yield and continue with no change in input stream parsing.
+                                    return(OSPARLogAnalogCompleteParams);
+                                }
+
+                                // wait time
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                odata[0].cb += sizeof(szWait0)-1;
+                            }
+                            break;
+
+                        case OSPARLogGetCurrentState:
+                            {
+                                IALOG&      ialog   = (iALogT.id == ALOG1_ID) ? pjcmd.iALog1 : pjcmd.iALog2;
+                                int64_t iStart = 0;
+                                int64_t curCount = 0;
+
+                                switch(iALogT.vol)
+                                {
+                                    case VOLRAM:
+
+                                        // only have to calculate these pointers if running
+                                        // other wise they are there.
+                                        if(ialog.state.processing == Running)
+                                        {
+                                            const OSC&          osc         = *((ALOG *) rgInstr[ialog.id])->posc;
+                                            int32_t             iDMA;
+                                            int32_t             clDMA;
+
+                                            // get a good dma location, ISR is running
+                                            do
+                                            {
+                                                clDMA   = ialog.bidx.cDMARoll;
+                                                iDMA    = osc.pDMAch2->DCHxDPTR;
+                                            } while(ialog.bidx.cDMARoll != clDMA);
+
+                                            // assign our snap-shot locations
+                                            iALogT.bidx.iDMAEnd     = iDMA / sizeof(uint16_t);
+                                            iALogT.bidx.cDMARoll    = clDMA;
+
+                                            // number of active samples taken
+                                            if(clDMA == 0)  
+                                            {
+                                                iALogT.bidx.iDMAStart       = 0;
+                                                iALogT.bidx.cTotalSamples   = iALogT.bidx.iDMAEnd; 
+                                            }
+                                            else
+                                            {
+                                                iALogT.bidx.iDMAStart      = iALogT.bidx.iDMAEnd;
+                                                iALogT.bidx.cTotalSamples  = LOGDMASIZE;       
+                                            }
+                                        }
+                                        break;
+
+                                    case VOLSD:
+                                        // only report what was written to the SD card, note cSavedRoll is the already written roll count
+                                        iALogT.bidx.iDMAEnd = ialog.bidx.iDMAStart;
+                                        iALogT.bidx.cDMARoll = ialog.bidx.cSavedRoll;
+                                        iALogT.bidx.cTotalSamples = ((int64_t) iALogT.bidx.cDMARoll) * LOGDMASIZE + iALogT.bidx.iDMAEnd;
+                                        break;
+
+                                    default:
+                                        ASSERT(NEVER_SHOULD_GET_HERE);
+                                        break;
+                                }
+
+                                // get current state
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szGetCurrentStateStatusCode, sizeof(szGetCurrentStateStatusCode)-1); 
+                                odata[0].cb += sizeof(szGetCurrentStateStatusCode)-1;
+
+                                // put in status code
+                                pchJSONRespBuff[odata[0].cb++] = '0';
+
+                                // the running  state 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szState, sizeof(szState)-1); 
+                                odata[0].cb += sizeof(szState)-1;
+
+                                // put out the instrument state
+                                switch(iALogT.state.processing)
+                                {
+                                    case Idle:
+                                        iALogT.bidx.iDMAStart       = 0;
+                                        iALogT.bidx.iDMAEnd         = 0;
+                                        iALogT.bidx.cTotalSamples   = 0;
+                                        iALogT.bidx.cDMARoll        = 0;
+                                        iALogT.stcd                 = STCDNormal;
+
+                                    case Stopped:
+                                    case Running:
+                                        strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[iALogT.state.processing]); 
+                                        break;
+
+                                    case Waiting:
+                                        strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Idle]); 
+                                        break;
+
+                                    // otherwise unknown states are just busy
+                                    default:
+                                        // busy doing something esle
+                                        strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Busy]); 
+                                        break;
+                                }
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]); 
+
+                                // the stopped reason 
+                                if (iALogT.state.processing == Stopped)
+                                {
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szStopReason, sizeof(szStopReason)-1); 
+                                    odata[0].cb += sizeof(szStopReason)-1;
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgszSTCD[iALogT.stcd]); 
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]); 
+                                }
+
+                                // Where are we in the count of samples
+                                curCount = ((int64_t) iALogT.bidx.cDMARoll) * LOGDMASIZE + iALogT.bidx.iDMAEnd;
+                                iStart = curCount - iALogT.bidx.cTotalSamples;
+
+                                // starting index
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szStartIndex, sizeof(szStartIndex)-1); 
+                                odata[0].cb += sizeof(szStartIndex)-1;
+                                illtoa(iStart, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                // put out cur sample count
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualCount, sizeof(szActualCount)-1); 
+                                odata[0].cb += sizeof(szActualCount)-1;
+                                illtoa(curCount, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                // fill out the rest of the parameters
+                                iALogT.state.parsing = OSPARLogAnalogCompleteParams;
+
+                                // returning a non Idle, non-error will cause the parent
+                                // state machines to yield and continue with no change in input stream parsing.
+                                return(OSPARLogAnalogCompleteParams);
+                            }
+                            break;
+
+                        case OSPARLogAnalogCompleteParams:
+
+                            // put out max sample count
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szMaxSampleCount, sizeof(szMaxSampleCount)-1); 
+                            odata[0].cb += sizeof(szMaxSampleCount)-1;
+                            illtoa(iALogT.maxSamples, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                            // put out the gain
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualGain, sizeof(szActualGain)-1); 
+                            odata[0].cb += sizeof(szActualGain)-1;
+                            memcpy(&pchJSONRespBuff[odata[0].cb], rgszGains[iALogT.gain], strlen(rgszGains[iALogT.gain])); 
+                            odata[0].cb += strlen(rgszGains[iALogT.gain]);
+
+                            // put out the actual offset
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
+                            odata[0].cb += sizeof(szActualVOffset)-1;
+                            itoa(iALogT.mvOffset, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                            // put out the sps Freq
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
+                            odata[0].cb += sizeof(szActualSampleFreq)-1;
+                            ulltoa(iALogT.bidx.xsps, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                            // put out the start delay
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualStartDelay, sizeof(szActualStartDelay)-1); 
+                            odata[0].cb += sizeof(szActualStartDelay)-1;
+                            illtoa(iALogT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                            // put out the overflow; --Deprecated--
+                            // memcpy(&pchJSONRespBuff[odata[0].cb], szOverflow, sizeof(szOverflow)-1); 
+                            // odata[0].cb += sizeof(szOverflow)-1;
+                            // i = strlen(rgOVFNames[iALogT.overflow]);
+                            // memcpy(&pchJSONRespBuff[odata[0].cb], rgOVFNames[iALogT.overflow], i); 
+                            // odata[0].cb += i;
+                            // pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                            // put out the storage location
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szStorageLocation, sizeof(szStorageLocation)-1); 
+                            odata[0].cb += sizeof(szStorageLocation)-1;
+                            i = strlen(rgVOLNames[iALogT.vol]);
+                            memcpy(&pchJSONRespBuff[odata[0].cb], rgVOLNames[iALogT.vol], i); 
+                            odata[0].cb += i;
+                            pchJSONRespBuff[odata[0].cb++] = '\"';
+ 
+                            // put out the uri
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szURI, sizeof(szURI)-1); 
+                            odata[0].cb += sizeof(szURI)-1;
+                            i = strlen(iALogT.szURI);
+                            memcpy(&pchJSONRespBuff[odata[0].cb], iALogT.szURI, i); 
+                            odata[0].cb += i;
+                            pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                            // wait time
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            odata[0].cb += sizeof(szWait0)-1;
+
+                            break;
+
+                        case OSPARLogRun:
+                            {
+                                FRESULT fr = FR_INVALID_NAME;
+                                IALOG& ialog = (iALogT.id == ALOG1_ID) ? pjcmd.iALog1 : pjcmd.iALog2;
+                                DFILE& dFile = *((DFILE *) ialog.pdFile);
+
+                                // run
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szRunStatus, sizeof(szRunStatus)-1); 
+                                odata[0].cb += sizeof(szRunStatus)-1;
+
+                                if(ialog.state.processing == Idle)
+                                {
+                                    utoa(InstrumentNotConfigured, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                    // wait time
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                    odata[0].cb += sizeof(szWait0)-1;
+                                }
+
+                                else if(!(IsOSCIdle() && (ialog.state.processing == Waiting || ialog.state.processing == Stopped) && ialog.buffLock == LOCKAvailable))
+                                {
+                                    utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                    // wait time
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                    odata[0].cb += sizeof(szWait0)-1;
+                                }
+
+                                else if(ialog.vol == VOLSD && 
+                                    (   ialog.szURI[0] == 0 || dFile ||
+                                        (fr = DFATFS::fschdrive(DFATFS::szFatFsVols[ialog.vol]))        != FR_OK    || 
+                                        (fr = DFATFS::fschdir(DFATFS::szRoot))                          != FR_OK    ||
+                                        (fr = dFile.fsopen(ialog.szURI, FA_OPEN_EXISTING | FA_WRITE))   != FR_OK    ||
+                                        (fr = dFile.fslseek(sizeof(LogHeader)))                         != FR_OK    ))
+                                {                                   
+                                    if(dFile) dFile.fsclose();
+                                    utoa((CFGFileSystemError | fr), &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                }
+
+                                else 
+                                {
+
+                                    // put in status code
+                                    pchJSONRespBuff[odata[0].cb++] = '0';
+
+                                    ialog.state.processing = (ialog.state.processing == Waiting) ? Queued : Working;
+                                    ialog.buffLock = LOCKAcq;
+
+                                    // truncate the file just past the header; close it
+                                    if(dFile)
+                                    {
+                                        dFile.fstruncate();
+                                        dFile.fsclose();
+                                    }
+
+                                    // wait time
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
+                                    odata[0].cb += sizeof(szWaitUntil)-1;
+                                }                               
+
+                            }
+
+                            break;
+
+                        case OSPARLogStop:
+                            {
+                                IALOG& ialog = (iALogT.id == ALOG1_ID) ? pjcmd.iALog1 : pjcmd.iALog2;
+                                char const * szTime = szWait0;
+                                uint32_t    cbTime;
+                            
+                                // stop
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szStopStatus, sizeof(szStopStatus)-1); 
+                                odata[0].cb += sizeof(szStopStatus)-1;
+
+                                if(ialog.state.processing == Running)
+                                {
+                                    STATE curState = ALOGStop(&ialog);
+
+                                    if(curState == Idle)
+                                    {
+                                        // put in status code
+                                        pchJSONRespBuff[odata[0].cb++] = '0';
+                                        szTime = szWait500;
+                                    }
+                                    else
+                                    {
+                                        utoa(curState, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    }
+                                }
+
+                                else if(IsLogxIdle(ialog))
+                                {
+                                    // put in status code
+                                    pchJSONRespBuff[odata[0].cb++] = '0';
+                                }
+
+                                else
+                                {
+                                    utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                }
+
+                                // wait time
+                                cbTime = strlen(szTime);
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szTime, cbTime); 
+                                odata[0].cb += cbTime;
+                            }
+                            break;
+
+                        case OSPARLogRead:
+                            {
+                                IALOG&  ialog   = (iALogT.id == ALOG1_ID) ? pjcmd.iALog1 : pjcmd.iALog2;
+                                ALOG&   alog    = *((ALOG *) rgInstr[iALogT.id]);
+
+                                // put out the command and status
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szReadStatusCode, sizeof(szReadStatusCode)-1); 
+                                odata[0].cb += sizeof(szReadStatusCode)-1;
+                          
+                                // after a run, these should all be set up
+                                // make consistent some values
+                                // iALogT.gain = alog.posc->curGain+1;
+                                // iALogT.mvOffset = OSCBandC(alog.posc, alog.posc->curGain, alog.posc->pOCoffset->OCxRS);
+
+                                // check for errors and not complete
+                                if(ialog.state.processing == Idle)
+                                {
+                                    utoa(InstrumentNotConfigured, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                }
+
+                                // it is out on the file
+                                else if(iALogT.vol == VOLSD)
+                                {
+                                    int64_t cTotal = (ialog.state.processing == Running) ? (ialog.bidx.cSavedRoll * LOGDMASIZE + ialog.bidx.iDMAStart) : (ialog.bidx.cDMARoll * LOGDMASIZE + ialog.bidx.iDMAEnd);
+
+                                    // if not running or stopped, then we have no file info
+                                    if(!(ialog.state.processing == Stopped || ialog.state.processing == Running))
+                                    {
+                                        utoa(InstrumentNotConfigured, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    }
+
+
+                                    if(iALogT.iStart == -1)     iALogT.iStart = cTotal - 1;
+
+                                    if(iALogT.bidx.cBuff == 0)  iALogT.bidx.cBuff = cTotal;
+                                    else if(iALogT.bidx.cBuff < 0)
+                                    {
+                                        iALogT.iStart += iALogT.bidx.cBuff + 1;
+                                        iALogT.bidx.cBuff *= -1;
+                                    }
+
+                                    if(iALogT.iStart < 0) 
+                                    {   
+                                        iALogT.bidx.cBuff += iALogT.iStart;
+                                        iALogT.iStart = 0;
+                                    }
+
+                                    if((iALogT.iStart + iALogT.bidx.cBuff) > cTotal) iALogT.bidx.cBuff = cTotal - iALogT.iStart;
+
+                                    if(iALogT.bidx.cBuff == 0)
+                                    {
+                                        utoa(NoDataAvailable, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    }
+                                    else if(iALogT.bidx.cBuff < 0)
+                                    {
+                                        utoa(ValueOutOfRange, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    }
+                                    else
+                                    {
+                                        odata[cOData].id            = ialog.id;
+                                        odata[cOData].pLockState    = &stateOutLock;
+                                        odata[cOData].cb            = iALogT.bidx.cBuff * sizeof(uint16_t);
+                                        odata[cOData].iOut          = (uint32_t) (iALogT.iStart * sizeof(uint16_t) + sizeof(LogHeader));
+                                        odata[cOData].pbOut         = (uint8_t *) pchJSONRespBuff;
+                                        odata[cOData].ReadData      = &OSPAR::ReadLogFile;
+
+                                        // scroll and process result buffer
+                                        iALogT.state.parsing = OSPARLogFinshRead;
+
+                                        // returning a non Idle, non-error will cause the parent
+                                        // state machines to yield and continue with no change in input stream parsing.
+                                        return(OSPARLogFinshRead);
+                                    }
+                                }
+
+                                // it is in the result buffer
+                                else if(ialog.state.processing == Stopped)
+                                {
+                                    int64_t cTotal = iALogT.bidx.iDMAEnd + LOGDMASIZE * iALogT.bidx.cDMARoll;
+                                    int64_t iStart = cTotal - iALogT.bidx.cTotalSamples;
+
+                                    if(iALogT.iStart == -1)     iALogT.iStart = cTotal - 1;
+
+                                    if(iALogT.bidx.cBuff == 0)  iALogT.bidx.cBuff = cTotal - iStart;
+                                    else if(iALogT.bidx.cBuff < 0)
+                                    {
+                                        iALogT.iStart += iALogT.bidx.cBuff + 1;
+                                        iALogT.bidx.cBuff *= -1;
+                                    }
+
+                                    if(iALogT.iStart < iStart) 
+                                    {   
+                                        iALogT.bidx.cBuff -= iStart - iALogT.iStart;
+                                        iALogT.iStart = iStart;
+                                    }
+
+                                    if((iALogT.iStart + iALogT.bidx.cBuff) > cTotal) iALogT.bidx.cBuff = cTotal - iALogT.iStart;
+
+                                    if(iALogT.bidx.cBuff == 0)
+                                    {
+                                        utoa(NoDataAvailable, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    }
+                                    else if(iALogT.bidx.cBuff < 0)
+                                    {
+                                        utoa(ValueOutOfRange, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    }
+                                    else
+                                    {
+                                        // fill in the binary chunk info
+                                        ialog.buffLock              = LOCKOutput;
+                                        odata[cOData].id            = ialog.id;
+                                        odata[cOData].pLockState    = &ialog.buffLock;
+                                        odata[cOData].cb            = iALogT.bidx.cBuff * sizeof(uint16_t);
+                                        odata[cOData].pbOut         = ((uint8_t *) ialog.pBuff);
+                                        odata[cOData].ReadData      = &OSPAR::ReadJSONResp;
+
+                                        // no matter where this comes from, we have to scroll the buffer
+                                        // The start of the buffer is at ALogT.bidx.iTrig, which lines up with iStart
+                                        // iALogT.iStart must be >= iStart, so the buffer to move to position zero is ALogT.bidx.iTrig + (iALogT.iStart must be - iStart)
+                                        ASSERT(iALogT.iStart >= iStart);
+                                        ASSERT((iALogT.iStart - iStart) <= iALogT.bidx.cTotalSamples); 
+                                        ScrollBuffer((uint16_t *) ialog.pBuff, LOGDMASIZE, 0, ((iALogT.bidx.iDMAStart + (iALogT.iStart - iStart)) % LOGDMASIZE));
+
+                                        // scroll and process result buffer
+                                        iALogT.state.parsing = OSPARLogFinshRead;
+
+                                        // returning a non Idle, non-error will cause the parent
+                                        // state machines to yield and continue with no change in input stream parsing.
+                                        return(OSPARLogFinshRead);
+                                    }
+                               }
+
+                                // we are going to have to snap shot the result
+                                else if(ialog.state.processing == Running && pjcmd.ila.buffLock == LOCKAvailable)
+                                {
+                                    int32_t             clDMA;
+                                    int64_t             cTotal;
+                                    int64_t             iStart;
+ 
+                                    // this is in a loop, because the logger may be running and
+                                    // things can be moving, ISR can be firing, and we want to get a semi
+                                    // stable snap shot of what is going on.
+                                    do
+                                    {
+                                        clDMA = ialog.bidx.cDMARoll;
+                                        iALogT.bidx.iDMAEnd = alog.posc->pDMAch2->DCHxDPTR / sizeof(uint16_t);
+
+                                        // copy the buffer
+                                        memcpy(pjcmd.ila.pBuff, ialog.pBuff, (LOGDMASIZE * sizeof(uint16_t)));
+
+                                        iALogT.bidx.iDMAStart = alog.posc->pDMAch2->DCHxDPTR / sizeof(uint16_t);
+
+                                    // The DMA pointer is only moving at a max rate of 50KHz
+                                    // So we should be able to do this is a small time interval and the gap should be small
+                                    // between the 2 taken pointer. If it is large due to the execution of an ISR, try again
+                                    // or if we rolled, just do it again
+                                    } while(ialog.bidx.cDMARoll != clDMA || (((iALogT.bidx.iDMAStart + LOGDMASIZE - iALogT.bidx.iDMAEnd) % LOGDMASIZE) > LOGOVERSIZE)); 
+
+                                    // snap shot the roll count
+                                    iALogT.bidx.cDMARoll = clDMA;
+                                    
+                                    if(iALogT.bidx.cDMARoll == 0)  
+                                    {
+                                        iALogT.bidx.cTotalSamples  = iALogT.bidx.iDMAEnd;
+                                        iALogT.bidx.iDMAStart   = 0;
+                                    }
+                                    else
+                                    {
+                                         iALogT.bidx.cTotalSamples = (iALogT.bidx.iDMAEnd + LOGDMASIZE - iALogT.bidx.iDMAStart) % LOGDMASIZE;
+                                         if(iALogT.bidx.cTotalSamples == 0) iALogT.bidx.cTotalSamples = LOGDMASIZE;
+                                    }
+
+                                    cTotal = iALogT.bidx.iDMAEnd + LOGDMASIZE * iALogT.bidx.cDMARoll;
+                                    iStart = cTotal - iALogT.bidx.cTotalSamples;
+
+                                    if(iALogT.iStart == -1)     iALogT.iStart = cTotal - 1;
+
+                                    if(iALogT.bidx.cBuff == 0)  iALogT.bidx.cBuff = cTotal - iStart;
+                                    else if(iALogT.bidx.cBuff < 0)
+                                    {
+                                        iALogT.iStart += iALogT.bidx.cBuff + 1;
+                                        iALogT.bidx.cBuff *= -1;
+
+                                        // we may have put the start index too early
+                                        if(iALogT.iStart < iStart)
+                                        {
+                                            iALogT.bidx.cBuff -= (iStart - iALogT.iStart);
+                                            iALogT.iStart = iStart;
+                                        }
+                                    }
+
+                                    if((iALogT.iStart + iALogT.bidx.cBuff) > cTotal) 
+                                    {
+                                        iALogT.bidx.cBuff = cTotal - iALogT.iStart;
+                                    }
+
+                                    if(iALogT.iStart < iStart) 
+                                    {   
+                                        utoa(StartIndexDoesNotExist, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    }
+                                    else if(iALogT.bidx.cBuff < 0)
+                                    {
+                                        utoa(ValueOutOfRange, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    }
+                                    else if(iALogT.bidx.cBuff == 0)
+                                    {
+                                        utoa(NoDataAvailable, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    }
+                                    else
+                                    {
+                                        pjcmd.ila.buffLock          = LOCKOutput;
+                                        odata[cOData].id            = ialog.id;
+                                        odata[cOData].pLockState    = &pjcmd.ila.buffLock;
+                                        odata[cOData].cb            = iALogT.bidx.cBuff * sizeof(uint16_t);
+                                        odata[cOData].pbOut         = (uint8_t *) pjcmd.ila.pBuff;
+                                        odata[cOData].ReadData      = &OSPAR::ReadJSONResp;
+
+                                        // no matter where this comes from, we have to scroll the buffer
+                                        // The start of the buffer is at ALogT.bidx.iTrig, which lines up with iStart
+                                        // iALogT.iStart must be >= iStart, so the buffer to move to position zero is ALogT.bidx.iTrig + (iALogT.iStart must be - iStart)
+                                        ASSERT(iALogT.iStart >= iStart);
+                                        ASSERT((iALogT.iStart - iStart) <= iALogT.bidx.cTotalSamples); 
+                                        ScrollBuffer(pjcmd.ila.pBuff, LOGDMASIZE, 0, ((iALogT.bidx.iDMAStart + (iALogT.iStart - iStart)) % LOGDMASIZE));
+
+                                        // scroll and process result buffer
+                                        iALogT.state.parsing = OSPARLogConvertBuffer;
+
+                                        // returning a non Idle, non-error will cause the parent
+                                        // state machines to yield and continue with no change in input stream parsing.
+                                        return(OSPARLogConvertBuffer);
+                                    }
+                                }
+
+                                else if(pjcmd.ila.buffLock != LOCKAvailable)
+                                {                                
+                                    utoa(NotEnoughMemory, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                }
+
+                                else
+                                {
+                                    utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                }
+                    
+                                // put out the wait time
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                odata[0].cb += sizeof(szWait0)-1;
+                            }
+
+                            break;
+
+                        case OSPARLogConvertBuffer:
+                            {
+                                ALOG&   alog    = *((ALOG *) rgInstr[iALogT.id]);
+
+                                // convert ADC data to mv
+                                OSCVinFromDadcArray(alog.posc, (int16_t *) pjcmd.ila.pBuff, LOGDMASIZE);
+
+                                // fill out the rest of the parameters
+                                iALogT.state.parsing = OSPARLogFinshRead;
+
+                                // returning a non Idle, non-error will cause the parent
+                                // state machines to yield and continue with no change in input stream parsing.
+                                return(OSPARLogFinshRead);
+                            }
+                            break;
+
+                        case OSPARLogFinshRead:
+                            // status code
+                            pchJSONRespBuff[odata[0].cb] = '0';
+                            odata[0].cb++;
+
+                            // binary offset
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szBinaryOffset, sizeof(szBinaryOffset)-1); 
+                            odata[0].cb += sizeof(szBinaryOffset)-1;
+                            utoa(iBinOffset, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                            iBinOffset += odata[cOData].cb;
+
+                            // binary length 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szBinaryLength, sizeof(szBinaryLength)-1); 
+                            odata[0].cb += sizeof(szBinaryLength)-1;
+                            utoa(odata[cOData].cb, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                            // How many samples
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualCount, sizeof(szActualCount)-1); 
+                            odata[0].cb += sizeof(szActualCount)-1;
+                            itoa((odata[cOData].cb / sizeof(uint16_t)), &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                            // starting index
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szStartIndex, sizeof(szStartIndex)-1); 
+                            odata[0].cb += sizeof(szStartIndex)-1;
+                            illtoa(iALogT.iStart, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                            // now go to the next binary buffer output.
+                            cOData++;
+
+                            // fill out the rest of the parameters
+                            iALogT.state.parsing = OSPARLogAnalogCompleteParams;
+
+                            // returning a non Idle, non-error will cause the parent
+                            // state machines to yield and continue with no change in input stream parsing.
+                            return(OSPARLogAnalogCompleteParams);
+                            break;
+
+                        // got a syntax error
+                        default:
+                            state = OSPARSyntaxError;
+                            break;
+                    }
+                }
+                break;
+
+           case OSPARLogAnalogChEnd:
+                if(jsonToken == tokEndArray)
+                {
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
+                    odata[0].cb += sizeof(szEndArray)-1;
+
+
+                    rgStrU32 = rgStrU32logAnalogChannel;
+                    cStrU32 = sizeof(rgStrU32logAnalogChannel) / sizeof(STRU32);
+
+                    stateEndArray = OSPARSyntaxError;
+                    stateEndObject = OSPARLogObjectEnd;
+                    stateValueSep = OSPARSeparatedNameValue;
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogObjectEnd:
+                if(jsonToken == tokEndObject)
+                {      
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEndObject, sizeof(szEndObject)-1); 
+                    odata[0].cb += sizeof(szEndObject)-1;
+
+                    stateEndObject = OSPARTopObjEnd;
+                    stateValueSep = OSPARLoadEndPoint;
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARLogDigital:
+            case OSPARLogDigitalCh1:
+                state = OSPARSyntaxError;
+                break;
+
+            /************************************************************************/
             /*    Generic LEXing                                                    */
             /************************************************************************/
             case Idle:
@@ -674,7 +1670,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokObject)
                 {
                     odata[0].cb = sizeof(szStartObject)-1;
-                    memcpy(rgchOut, szStartObject, odata[0].cb);  
+                    memcpy(pchJSONRespBuff, szStartObject, odata[0].cb);  
                     rgStrU32 = rgStrU32Endpoint;
                     cStrU32 = sizeof(rgStrU32Endpoint) / sizeof(STRU32);
                     state = OSPARMemberName;
@@ -730,7 +1726,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARSeparatedObject:
                 if(jsonToken == tokObject)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szValueSep, sizeof(szValueSep)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szValueSep, sizeof(szValueSep)-1); 
                     odata[0].cb += sizeof(szValueSep)-1;
                     state = OSPARMemberName;
                 }
@@ -739,7 +1735,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARSeparatedNameValue:
                 if(jsonToken == tokMemberName)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szValueSep, sizeof(szValueSep)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szValueSep, sizeof(szValueSep)-1); 
                     odata[0].cb += sizeof(szValueSep)-1;
                     state = OSPARMemberName;
                     fContinue = true;
@@ -753,19 +1749,30 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 break;
 
             case OSPAREnd:
-                memcpy(&rgchOut[odata[0].cb], szEndObject, sizeof(szEndObject)-1);                 
+                memcpy(&pchJSONRespBuff[odata[0].cb], szEndObject, sizeof(szEndObject)-1);                 
                 odata[0].cb += sizeof(szEndObject)-1;
 
-                memcpy(&rgchOut[odata[0].cb], szNewLine, sizeof(szNewLine)-1);                 
-                odata[0].cb += sizeof(szNewLine)-1;
+//                pchJSONRespBuff[odata[0].cb++] = '\r';
+//                pchJSONRespBuff[odata[0].cb++] = '\n';
 
                 state = Idle;
+                break;
+
+            case OSPARTopEndArray:
+                if(jsonToken == tokEndArray)
+                {
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
+                    odata[0].cb += sizeof(szEndArray)-1;
+                    stateEndObject = OSPARLoadEndPoint;
+                    stateValueSep = OSPARLoadEndPoint;
+                    state = OSPARSkipValueSep;
+                }
                 break;
 
             case OSPARTopObjEnd:
                 if(jsonToken == tokEndObject)
                 {      
-                    memcpy(&rgchOut[odata[0].cb], szEndObject, sizeof(szEndObject)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEndObject, sizeof(szEndObject)-1); 
                     odata[0].cb += sizeof(szEndObject)-1;
                     stateEndObject = OSPARLoadEndPoint;
                     stateValueSep = OSPARLoadEndPoint;
@@ -814,25 +1821,25 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         Serial.EnablePrint(!fModeJSON);
 
                         // print out mode
-                        memcpy(&rgchOut[odata[0].cb], szMode, sizeof(szMode)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szMode, sizeof(szMode)-1); 
                         odata[0].cb += sizeof(szMode)-1;
 
-                        memcpy(&rgchOut[odata[0].cb], szToken, cbToken); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szToken, cbToken); 
                         odata[0].cb += cbToken;
 
-                        rgchOut[odata[0].cb++] = '\"';
+                        pchJSONRespBuff[odata[0].cb++] = '\"';
                     
-                        memcpy(&rgchOut[odata[0].cb], szStatusCode0, sizeof(szStatusCode0)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szStatusCode0, sizeof(szStatusCode0)-1); 
                         odata[0].cb += sizeof(szStatusCode0)-1;
 
                         if(mode)
                         {
-                            memcpy(&rgchOut[odata[0].cb], szWait500, sizeof(szWait500)-2); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait500, sizeof(szWait500)-2); 
                             odata[0].cb += sizeof(szWait500)-2;
                         }
                         else
                         {
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-2); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-2); 
                             odata[0].cb += sizeof(szWait0)-2;
                         }
 
@@ -854,25 +1861,25 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         Serial.EnablePrint(mode);
 
                         // print out mode
-                        memcpy(&rgchOut[odata[0].cb], szDebugPrint, sizeof(szDebugPrint)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szDebugPrint, sizeof(szDebugPrint)-1); 
                         odata[0].cb += sizeof(szDebugPrint)-1;
 
-                        memcpy(&rgchOut[odata[0].cb], szToken, cbToken); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szToken, cbToken); 
                         odata[0].cb += cbToken;
 
-                        rgchOut[odata[0].cb++] = '\"';
+                        pchJSONRespBuff[odata[0].cb++] = '\"';
                     
-                        memcpy(&rgchOut[odata[0].cb], szStatusCode0, sizeof(szStatusCode0)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szStatusCode0, sizeof(szStatusCode0)-1); 
                         odata[0].cb += sizeof(szStatusCode0)-1;
 
                         if(mode)
                         {
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-2); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-2); 
                             odata[0].cb += sizeof(szWait0)-2;
                         }
                         else
                         {
-                            memcpy(&rgchOut[odata[0].cb], szWait500, sizeof(szWait500)-2); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait500, sizeof(szWait500)-2); 
                             odata[0].cb += sizeof(szWait500)-2;
                         }
 
@@ -881,6 +1888,517 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         stateValueSep = OSPARLoadEndPoint;
                         state = OSPARSkipValueSep;
                     }
+                }
+                break;
+
+            /************************************************************************/
+            /*    File parsing                                                      */
+            /************************************************************************/        
+            case OSPARFileArray:
+                if(jsonToken == tokArray)
+                {
+                    memcpy(&iFileT, &uicmd.iFile, sizeof(IFILE));   // get what this is; we may not use it though
+
+                    rgStrU32 = rgStrU32File;
+                    cStrU32 = sizeof(rgStrU32File) / sizeof(STRU32);
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szFileArray, sizeof(szFileArray)-1); 
+                    odata[0].cb += sizeof(szFileArray)-1;
+                    
+                    stateEndObject = OSPARFileEndObject;
+                    stateValueSep = OSPARMemberName;
+                    state = OSPARSkipObject;
+                }
+                break;  
+                
+            case OSPARFileCmd:
+                if(jsonToken == tokStringValue)
+                {
+                    state   = (STATE) Uint32FromStr(rgStrU32FileCmd, sizeof(rgStrU32FileCmd) / sizeof(STRU32), szToken, cbToken);
+                    fContinue = true;
+                }
+                break;
+
+            case OSPARFileStorageType:
+                if(jsonToken == tokStringValue)
+                {
+                    iFileT.vol = (VOLTYPE) Uint32FromStr(rgStrU32FileVol, sizeof(rgStrU32FileVol) / sizeof(STRU32), szToken, cbToken, (STATE) VOLNONE);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFilePath:
+                if(jsonToken == tokStringValue)
+                {
+                    if(cbToken > MAX_PATH) cbToken = MAX_PATH;
+
+                    memcpy(iFileT.szPath, szToken, cbToken);
+                    iFileT.szPath[cbToken] = '\0';
+
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFilePostion:
+                if(jsonToken == tokNumber)
+                {
+                    char szT[32];
+                    memcpy(szT, szToken, cbToken);
+                    szT[cbToken] = '\0';
+                    iFileT.iFilePosition = atoi(szT);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFileBinaryOffset:
+                {
+                    char szT[32];
+                    memcpy(szT, szToken, cbToken);
+                    szT[cbToken] = '\0';
+                    iFileT.iBinOffset = atoi(szT);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFileRequestedLength:
+                {
+                    char szT[32];
+                    memcpy(szT, szToken, cbToken);
+                    szT[cbToken] = '\0';
+                    iFileT.cbLength = atoi(szT);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFileBinaryLength:
+                {
+                    char szT[32];
+                    memcpy(szT, szToken, cbToken);
+                    szT[cbToken] = '\0';
+                    iFileT.cbLength = atoi(szT);
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFileRead:
+                if(jsonToken == tokStringValue)
+                {
+                    iFileT.state.parsing = OSPARFileRead;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szReadStatusCode, sizeof(szReadStatusCode)-1); 
+                    odata[0].cb += sizeof(szReadStatusCode)-1;
+
+                   state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFileWrite:
+                if(jsonToken == tokStringValue)
+                {
+                    iFileT.state.parsing = OSPARFileWrite;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szWriteStatusCode, sizeof(szWriteStatusCode)-1); 
+                    odata[0].cb += sizeof(szWriteStatusCode)-1;
+
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFileMkdir:
+                if(jsonToken == tokStringValue)
+                {
+                    iFileT.state.parsing = OSPARFileMkdir;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szMkDirStatusCode, sizeof(szMkDirStatusCode)-1); 
+                    odata[0].cb += sizeof(szMkDirStatusCode)-1;
+
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFileDelete:
+                if(jsonToken == tokStringValue)
+                {
+                    iFileT.state.parsing = OSPARFileDelete;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeleteStatusCode, sizeof(szDeleteStatusCode)-1); 
+                    odata[0].cb += sizeof(szDeleteStatusCode)-1;
+
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFileGetFileSize:
+                if(jsonToken == tokStringValue)
+                {
+                    iFileT.state.parsing = OSPARFileGetFileSize;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szGetFileSizeStatusCode, sizeof(szGetFileSizeStatusCode)-1); 
+                    odata[0].cb += sizeof(szGetFileSizeStatusCode)-1;
+
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFileListdir:
+                if(jsonToken == tokStringValue)
+                {
+                    iFileT.state.parsing = OSPARFileListdir;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szListdirStatusCode, sizeof(szListdirStatusCode)-1); 
+                    odata[0].cb += sizeof(szListdirStatusCode)-1;
+
+                    state = OSPARSkipValueSep;
+                }
+                break;
+
+            case OSPARFileEndObject:
+                if(jsonToken == tokEndObject)
+                {
+                    STATE curState = Idle;
+
+                    switch(iFileT.state.parsing)
+                    {
+                        case OSPARFileGetFileSize:
+                            if(dGFile)
+                            {
+                                utoa(FileInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                            }
+                            else if( DFATFS::fschdrive(DFATFS::szFatFsVols[iFileT.vol])         != FR_OK        || 
+                                    DFATFS::fschdir(DFATFS::szRoot)                             != FR_OK        ||
+                                    dGFile.fsopen(iFileT.szPath, FA_OPEN_EXISTING | FA_READ)    != FR_OK        )
+                            {
+                                utoa(InvalidFileName, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                            }
+                            else 
+                            {
+                                // status code
+                                pchJSONRespBuff[odata[0].cb++] = '0';
+
+                                // type
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szType, sizeof(szType)-1); 
+                                odata[0].cb += sizeof(szType)-1;
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgVOLNames[iFileT.vol]);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                                // path
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szFilePath, sizeof(szFilePath)-1); 
+                                odata[0].cb += sizeof(szFilePath)-1;
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+                                strcpy(&pchJSONRespBuff[odata[0].cb], iFileT.szPath);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualFileSize, sizeof(szActualFileSize)-1); 
+                                odata[0].cb += sizeof(szActualFileSize)-1;
+                                ulltoa(dGFile.fssize(), &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                dGFile.fsclose();
+                            }
+
+                            // wait time
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            odata[0].cb += sizeof(szWait0)-1;
+                            break;
+
+                        case OSPARFileListdir:
+                            if( DFATFS::fschdrive(DFATFS::szFatFsVols[iFileT.vol])  != FR_OK        || 
+                                DFATFS::fschdir(DFATFS::szRoot)                     != FR_OK        ||
+                                DDIRINFO::fsopendir(iFileT.szPath)                  != FR_OK        )
+                            {
+                                utoa(DirectoryDoesNotExist, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                            }
+                            else 
+                            {
+                                char szFileName[128];
+                                char const * szFile = NULL;
+
+                                // status code
+                                pchJSONRespBuff[odata[0].cb++] = '0';
+
+                                // type
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szType, sizeof(szType)-1); 
+                                odata[0].cb += sizeof(szType)-1;
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgVOLNames[iFileT.vol]);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                                // path
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szFilePath, sizeof(szFilePath)-1); 
+                                odata[0].cb += sizeof(szFilePath)-1;
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+                                strcpy(&pchJSONRespBuff[odata[0].cb], iFileT.szPath);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                                // files
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szFilesArray, sizeof(szFilesArray)-1); 
+                                odata[0].cb += sizeof(szFilesArray)-1;
+
+                                DDIRINFO::fssetLongFilename(szFileName);
+                                DDIRINFO::fssetLongFilenameLength(sizeof(szFileName));
+
+                                while(DDIRINFO::fsreaddir() == FR_OK)
+                                {
+                                    szFile = DDIRINFO::fsgetLongFilename();
+                                    if(szFile[0] == '\0') szFile = DDIRINFO::fsget8Dot3Filename();
+                                    if(szFile[0] == '\0') break;                                   
+                                    else
+                                    {
+                                        // path
+                                        pchJSONRespBuff[odata[0].cb++] = '\"';
+                                        strcpy(&pchJSONRespBuff[odata[0].cb], szFile); 
+                                        odata[0].cb += strlen(szFile);
+                                        pchJSONRespBuff[odata[0].cb++] = '\"';
+                                        pchJSONRespBuff[odata[0].cb++] = ',';
+                                    }
+                                }
+
+                                // take out the last comma
+                                if(pchJSONRespBuff[odata[0].cb-1] == ',') odata[0].cb--;
+
+                                // put in the last ]
+                                pchJSONRespBuff[odata[0].cb++] = ']';
+
+                                // close the directory
+                                DDIRINFO::fsclosedir();
+                            }
+
+                            // wait time
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            odata[0].cb += sizeof(szWait0)-1;
+                            break;
+
+                        case OSPARFileRead:
+
+                            if(dGFile)
+                            {
+                                utoa(FileInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                            }
+
+                            else if((curState = IOReadFileN(dGFile, iFileT.vol, iFileT.szPath, 0, NULL, 0, NULL)) != IORead)
+                            {
+                                dGFile.fsclose();
+                                utoa((uint32_t) curState, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                            }
+                            // we are good
+                            else if( iFileT.iFilePosition < 0 || (uint32_t) iFileT.iFilePosition > dGFile.fssize() || iFileT.cbLength < -1 ||
+                                    (iFileT.cbLength > 0 && (uint32_t) (iFileT.iFilePosition + iFileT.cbLength) > dGFile.fssize())         )
+                            {
+                                dGFile.fsclose();
+                                utoa(ValueOutOfRange, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                            }
+                            else 
+                            {
+                                if(iFileT.cbLength == -1) iFileT.cbLength = dGFile.fssize() - iFileT.iFilePosition;
+
+                                dGFile.fslseek(iFileT.iFilePosition);
+
+                                // File Data
+                                odata[cOData].pbOut = NULL;
+                                odata[cOData].cb = iFileT.cbLength;
+                                odata[cOData].ReadData = &OSPAR::ReadFile;
+
+                                // status code
+                                pchJSONRespBuff[odata[0].cb++] = '0';
+
+                                // type
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szType, sizeof(szType)-1); 
+                                odata[0].cb += sizeof(szType)-1;
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgVOLNames[iFileT.vol]);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                                // path
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szFilePath, sizeof(szFilePath)-1); 
+                                odata[0].cb += sizeof(szFilePath)-1;
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+                                strcpy(&pchJSONRespBuff[odata[0].cb], iFileT.szPath);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                                // actual file position
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualFilePosition, sizeof(szActualFilePosition)-1); 
+                                odata[0].cb += sizeof(szActualFilePosition)-1;
+                                itoa(iFileT.iFilePosition, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                        
+                                // actual length
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualLength, sizeof(szActualLength)-1); 
+                                odata[0].cb += sizeof(szActualLength)-1;
+                                itoa(iFileT.cbLength, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                // offset in the OSBJ
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szBinaryOffset, sizeof(szBinaryOffset)-1); 
+                                odata[0].cb += sizeof(szBinaryOffset)-1;
+                                itoa(iBinOffset, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                // length of binary 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szBinaryLength, sizeof(szBinaryLength)-1); 
+                                odata[0].cb += sizeof(szBinaryLength)-1;
+                                itoa(odata[cOData].cb, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                // update and finish
+                                memcpy(&uicmd.iFile, &iFileT, sizeof(IFILE));  
+                                uicmd.iFile.buffLock = LOCKOutput;
+                                odata[cOData].pLockState = &uicmd.iFile.buffLock;
+                                cOData++;
+                            }
+
+                            // wait time
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            odata[0].cb += sizeof(szWait0)-1;
+                            break;
+
+
+                        case OSPARFileWrite:
+                            {
+                                STATE curState;
+
+                                if(uicmd.iFile.buffLock != LOCKAvailable)
+                                {
+                                    itoa(FileInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                }
+
+                                // we were not able to open, something went wrong
+                                else if((curState = IOWriteFileN(uicmd.iFile.dFile, iFileT.vol, iFileT.szPath, iFileT.iFilePosition, NULL, 0, NULL)) != IOWrite)
+                                {
+                                    utoa((uint32_t) curState, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                }
+
+                                // we got it, we can continue
+                                else
+                                {
+                                    // status code
+                                    pchJSONRespBuff[odata[0].cb++] = '0';
+
+                                    // type
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szType, sizeof(szType)-1); 
+                                    odata[0].cb += sizeof(szType)-1;
+                                    pchJSONRespBuff[odata[0].cb++] = '\"';
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgVOLNames[iFileT.vol]);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                                    // path
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szFilePath, sizeof(szFilePath)-1); 
+                                    odata[0].cb += sizeof(szFilePath)-1;
+                                    pchJSONRespBuff[odata[0].cb++] = '\"';
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], iFileT.szPath);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                                    // actual file position
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szActualFilePosition, sizeof(szActualFilePosition)-1); 
+                                    odata[0].cb += sizeof(szActualFilePosition)-1;
+                                    itoa(iFileT.iFilePosition, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                        
+                                    // offset in the OSBJ
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szBinaryOffset, sizeof(szBinaryOffset)-1); 
+                                    odata[0].cb += sizeof(szBinaryOffset)-1;
+                                    itoa(iFileT.iBinOffset, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                    // length of binary 
+//                                    iFileT.cbLength = min((int32_t) (uicmd.iFile.dFile.fssize() - iFileT.iFilePosition), iFileT.cbLength);
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szBinaryLength, sizeof(szBinaryLength)-1); 
+                                    odata[0].cb += sizeof(szBinaryLength)-1;
+                                    itoa(iFileT.cbLength, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                    // update and finish
+                                    memcpy(&uicmd.iFile, &iFileT, sizeof(IFILE) - sizeof(DFILE));
+                                    idata[cIData].WriteData = uicmd.iFile.WriteFile;
+                                    idata[cIData].cb = uicmd.iFile.cbLength;
+                                    idata[cIData].iBinary = uicmd.iFile.iBinOffset;
+                                    uicmd.iFile.buffLock = LOCKInput;
+
+                                    cIData++;
+                                }
+
+                                // wait time
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                odata[0].cb += sizeof(szWait0)-1;
+
+                            }
+                            break;
+
+                        case OSPARFileDelete:
+                            {
+                                FRESULT fr = FR_OK;
+
+                                if( (fr =DFATFS::fschdrive(DFATFS::szFatFsVols[iFileT.vol]))    != FR_OK    || 
+                                    (fr =DFATFS::fschdir(DFATFS::szRoot))                       != FR_OK    ||
+                                    (fr =DFATFS::fsunlink(iFileT.szPath))                       != FR_OK    )
+                                {
+                                    utoa((fr | STATEError | STATECompound), &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                }
+                                else
+                                {
+                                    // status code
+                                    pchJSONRespBuff[odata[0].cb++] = '0';
+
+                                    // type
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szType, sizeof(szType)-1); 
+                                    odata[0].cb += sizeof(szType)-1;
+                                    pchJSONRespBuff[odata[0].cb++] = '\"';
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgVOLNames[iFileT.vol]);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    pchJSONRespBuff[odata[0].cb++] = '\"';
+
+                                    // path
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szFilePath, sizeof(szFilePath)-1); 
+                                    odata[0].cb += sizeof(szFilePath)-1;
+                                    pchJSONRespBuff[odata[0].cb++] = '\"';
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], iFileT.szPath);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                                    pchJSONRespBuff[odata[0].cb++] = '\"';
+                                }
+
+                                // wait time
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                odata[0].cb += sizeof(szWait0)-1;
+                            }
+                            break;
+
+                        case OSPARFileMkdir:
+                            if(jsonToken == tokStringValue)
+                            {
+                                utoa(Unimplemented, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                                // wait time
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                odata[0].cb += sizeof(szWait0)-1;
+                            }
+                            break;
+
+                        default:
+                            ASSERT(NEVER_SHOULD_GET_HERE);
+                            break;
+                    }
+                    
+                    stateEndArray = OSPARTopEndArray;
+                    stateValueSep = OSPARSeparatedObject;
+                    state = OSPARSkipValueSep;
                 }
                 break;
 
@@ -895,7 +2413,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     rgStrU32 = rgStrU32Device;
                     cStrU32 = sizeof(rgStrU32Device) / sizeof(STRU32);
 
-                    memcpy(&rgchOut[odata[0].cb], szDevice, sizeof(szDevice)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDevice, sizeof(szDevice)-1); 
                     odata[0].cb += sizeof(szDevice)-1;
                     
                     state = OSPARSkipObject;
@@ -913,7 +2431,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARDeviceResetInstruments:
                 if(jsonToken == tokStringValue)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szResetInstruments, sizeof(szResetInstruments)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szResetInstruments, sizeof(szResetInstruments)-1); 
                     odata[0].cb += sizeof(szResetInstruments)-1;
 
                     ResetInstruments();
@@ -928,22 +2446,38 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARDeviceEnmerate:
                 if(jsonToken == tokStringValue)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szEnumeration1, sizeof(szEnumeration1)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEnumeration1, sizeof(szEnumeration1)-1); 
                     odata[0].cb += sizeof(szEnumeration1)-1;
 
                     // put version number in
-                    strcpy(&rgchOut[odata[0].cb], szEnumVersion);
+                    strcpy(&pchJSONRespBuff[odata[0].cb], szEnumVersion);
                     odata[0].cb += strlen(szEnumVersion);
 
-                    memcpy(&rgchOut[odata[0].cb], szEnumeration2, sizeof(szEnumeration2)-1); 
+                    // put MAC address out
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEnumeration2, sizeof(szEnumeration2)-1); 
                     odata[0].cb += sizeof(szEnumeration2)-1;
 
-                    // put in the calibration source  
-                    strcpy(&rgchOut[odata[0].cb], rgCFGNames[((IDHDR *) rgInstr[OSC2_ID])->cfg]);
-                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                    // Print out our MAC address
+                    GetNumb(macOpenScope.u8, sizeof(macOpenScope), ':', &pchJSONRespBuff[odata[0].cb]);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                    memcpy(&rgchOut[odata[0].cb], szEnumeration3, sizeof(szEnumeration3)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEnumeration3, sizeof(szEnumeration3)-1); 
                     odata[0].cb += sizeof(szEnumeration3)-1;
+
+                    // put in the calibration source  
+                    strcpy(&pchJSONRespBuff[odata[0].cb], rgCFGNames[((IDHDR *) rgInstr[OSC2_ID])->cfg]);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                    // put MAC address out
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEnumeration4, sizeof(szEnumeration4)-1); 
+                    odata[0].cb += sizeof(szEnumeration4)-1;
+
+                    // Print out our MAC address
+                    GetNumb(macOpenScope.u8, sizeof(macOpenScope), ':', &pchJSONRespBuff[odata[0].cb]);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEnumeration5, sizeof(szEnumeration5)-1); 
+                    odata[0].cb += sizeof(szEnumeration5)-1;
 
                     // get next member name
                     stateEndObject = OSPARDeviceEndObject;
@@ -955,7 +2489,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARDeviceEnterBootloader:
                 if(jsonToken == tokStringValue)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szEnterBootloader, sizeof(szEnterBootloader)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEnterBootloader, sizeof(szEnterBootloader)-1); 
                     odata[0].cb += sizeof(szEnterBootloader)-1;
 
                     pjcmd.iBoot.processing = Queued;
@@ -967,16 +2501,70 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 }
                 break;
 
-            case OSPARDeviceAveLoopTime:
+            case OSPARDeviceLoopStats:
                 if(jsonToken == tokStringValue)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szAveLoopTime1, sizeof(szAveLoopTime1)-1); 
-                    odata[0].cb += sizeof(szAveLoopTime1)-1;
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szLoopStats, sizeof(szLoopStats)-1); 
+                    odata[0].cb += sizeof(szLoopStats)-1;
 
-                    itoa((aveLoopTime / CORE_TMR_TICKS_PER_USEC), &rgchOut[odata[0].cb], 10);
-                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                    utoa((aveLoopTime / CORE_TMR_TICKS_PER_USEC), &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                    memcpy(&rgchOut[odata[0].cb], szStatus0Wait0, sizeof(szStatus0Wait0)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szMinLoopTime, sizeof(szMinLoopTime)-1); 
+                    odata[0].cb += sizeof(szMinLoopTime)-1;
+
+                    utoa((minLoopTime / CORE_TMR_TICKS_PER_USEC), &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                    minLoopTime = 0xFFFFFFFF;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szMaxLoopTime, sizeof(szMaxLoopTime)-1); 
+                    odata[0].cb += sizeof(szMaxLoopTime)-1;
+
+                    utoa((maxLoopTime / CORE_TMR_TICKS_PER_USEC), &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                    maxLoopTime = 0;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szLastCommandTime, sizeof(szLastCommandTime)-1); 
+                    odata[0].cb += sizeof(szLastCommandTime)-1;
+
+                    utoa(tLastCmd, &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szAveLogCnt, sizeof(szAveLogCnt)-1); 
+                    odata[0].cb += sizeof(szAveLogCnt)-1;
+
+                    utoa((aveLogWrite), &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szMaxLogCnt, sizeof(szMaxLogCnt)-1); 
+                    odata[0].cb += sizeof(szMaxLogCnt)-1;
+
+                    utoa((maxLogWrite), &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                    maxLogWrite = 0;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szMaxLogWrittenCnt, sizeof(szMaxLogWrittenCnt)-1); 
+                    odata[0].cb += sizeof(szMaxLogWrittenCnt)-1;
+
+                    utoa((maxLogWrittenCnt), &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                    maxLogWrittenCnt = 0;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szMaxSDBusyTime, sizeof(szMaxSDBusyTime)-1); 
+                    odata[0].cb += sizeof(szMaxSDBusyTime)-1;
+
+                    utoa((dSDVol.tBusyMax), &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                    dSDVol.tBusyMax = 0;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szMaxInARowBusy, sizeof(szMaxInARowBusy)-1); 
+                    odata[0].cb += sizeof(szMaxInARowBusy)-1;
+
+                    utoa((dSDVol.maxBusyInARow), &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                    dSDVol.maxBusyInARow = 0;
+
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szStatus0Wait0, sizeof(szStatus0Wait0)-1); 
                     odata[0].cb += sizeof(szStatus0Wait0)-1;
 
                     // get next member name
@@ -989,19 +2577,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARDeviceEndObject:
                 if(jsonToken == tokEndObject)
                 {
-                    stateEndArray = OSPARDeviceEndArray;
+                    stateEndArray = OSPARTopEndArray;
                     stateValueSep = OSPARSeparatedObject;
-                    state = OSPARSkipValueSep;
-                }
-                break;
-
-            case OSPARDeviceEndArray:
-                if(jsonToken == tokEndArray)
-                {
-                    memcpy(&rgchOut[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
-                    odata[0].cb += sizeof(szEndArray)-1;
-                    stateEndObject = OSPARLoadEndPoint;
-                    stateValueSep = OSPARLoadEndPoint;
                     state = OSPARSkipValueSep;
                 }
                 break;
@@ -1012,16 +2589,16 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARDeviceCalibrationGetTypes:
                 if(jsonToken == tokStringValue)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szCalibrationGetTypesFlash, sizeof(szCalibrationGetTypesFlash)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szCalibrationGetTypesFlash, sizeof(szCalibrationGetTypesFlash)-1); 
                     odata[0].cb += sizeof(szCalibrationGetTypesFlash)-1;
 
                     if(DFATFS::fsvolmounted(DFATFS::szFatFsVols[VOLSD]))
                     {
-                        memcpy(&rgchOut[odata[0].cb], szStorageGetLocationsSd0, sizeof(szStorageGetLocationsSd0)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szStorageGetLocationsSd0, sizeof(szStorageGetLocationsSd0)-1); 
                         odata[0].cb += sizeof(szStorageGetLocationsSd0)-1;
                     }
 
-                    memcpy(&rgchOut[odata[0].cb], szDeviceEnd, sizeof(szDeviceEnd)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceEnd, sizeof(szDeviceEnd)-1); 
                     odata[0].cb += sizeof(szDeviceEnd)-1;
 
                     // just go to Device end because this a simple string
@@ -1035,16 +2612,16 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARDeviceStorageGetLocations:
                 if(jsonToken == tokStringValue)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szStorageGetLocationsFlash, sizeof(szStorageGetLocationsFlash)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szStorageGetLocationsFlash, sizeof(szStorageGetLocationsFlash)-1); 
                     odata[0].cb += sizeof(szStorageGetLocationsFlash)-1;
 
                     if(DFATFS::fsvolmounted(DFATFS::szFatFsVols[VOLSD]))
                     {
-                        memcpy(&rgchOut[odata[0].cb], szStorageGetLocationsSd0, sizeof(szStorageGetLocationsSd0)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szStorageGetLocationsSd0, sizeof(szStorageGetLocationsSd0)-1); 
                         odata[0].cb += sizeof(szStorageGetLocationsSd0)-1;
                     }
 
-                    memcpy(&rgchOut[odata[0].cb], szDeviceEnd, sizeof(szDeviceEnd)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceEnd, sizeof(szDeviceEnd)-1); 
                     odata[0].cb += sizeof(szDeviceEnd)-1;
 
                     // just go to Device end because this a simple string
@@ -1058,7 +2635,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARDeviceCalibrationGetInstructions:
                 if(jsonToken == tokStringValue)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szCalibrationGetInstructions, sizeof(szCalibrationGetInstructions)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szCalibrationGetInstructions, sizeof(szCalibrationGetInstructions)-1); 
                     odata[0].cb += sizeof(szCalibrationGetInstructions)-1;
 
                     // just go to Device end because this a simple string
@@ -1084,7 +2661,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 {
                     pjcmd.iCal.state.parsing = JSPARCalibrationStart;
 
-                    memcpy(&rgchOut[odata[0].cb], szDeviceCalStart, sizeof(szDeviceCalStart)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceCalStart, sizeof(szDeviceCalStart)-1); 
                     odata[0].cb += sizeof(szDeviceCalStart)-1;
 
                     // get next member name
@@ -1099,7 +2676,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 {
                     pjcmd.iCal.state.parsing = JSPARCalibratingRead;
 
-                    memcpy(&rgchOut[odata[0].cb], szDeviceCalRead, sizeof(szDeviceCalRead)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceCalRead, sizeof(szDeviceCalRead)-1); 
                     odata[0].cb += sizeof(szDeviceCalRead)-1;
 
                     // get next member name
@@ -1115,7 +2692,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     pjcmd.iCal.state.parsing = JSPARCalibrationLoad;
 
                     // put out the save commmand
-                    memcpy(&rgchOut[odata[0].cb], szDeviceCalLoad, sizeof(szDeviceCalLoad)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceCalLoad, sizeof(szDeviceCalLoad)-1); 
                     odata[0].cb += sizeof(szDeviceCalLoad)-1;
 
                     // get next member name
@@ -1131,7 +2708,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     pjcmd.iCal.state.parsing = JSPARCalibrationSave;
 
                     // put out the save commmand
-                    memcpy(&rgchOut[odata[0].cb], szDeviceCalSave, sizeof(szDeviceCalSave)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceCalSave, sizeof(szDeviceCalSave)-1); 
                     odata[0].cb += sizeof(szDeviceCalSave)-1;
 
                     // get next member name
@@ -1151,32 +2728,32 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             if(pjcmd.iCal.state.processing == NotCfgForCalibration)
                             {
                                 // Put out the error status
-                                utoa(NotCfgForCalibration, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(NotCfgForCalibration, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
                             }
                             else if(pjcmd.iCal.state.processing == JSPARCalibrationStart)
                             {
                                 // Put out the calibrating status; not an error
-                                utoa(Calibrating, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(Calibrating, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
                             }
 
                             else if(pjcmd.iCal.state.processing != Idle)
                             {
                                 // We are doing something
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
                             }
 
@@ -1191,198 +2768,198 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 OSC oscT    = OSC(OSC1_ID);
 
                                 // status code
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
 
                                 // wait 0; but no closing brace.... -2
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-2); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-2); 
                                 odata[0].cb += sizeof(szWait0)-2;
 
                                 // calibrationData
-                                memcpy(&rgchOut[odata[0].cb], szDeviceCalData, sizeof(szDeviceCalData)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceCalData, sizeof(szDeviceCalData)-1); 
                                 odata[0].cb += sizeof(szDeviceCalData)-1;
 
                                 // dc channel 1
-                                memcpy(&rgchOut[odata[0].cb], szDeviceDcCh1, sizeof(szDeviceDcCh1)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceDcCh1, sizeof(szDeviceDcCh1)-1); 
                                 odata[0].cb += sizeof(szDeviceDcCh1)-1;
-                                strcpy(&rgchOut[odata[0].cb], rgCFGNames[((IDHDR *) rgInstr[DCVOLT1_ID])->cfg]); 
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgCFGNames[((IDHDR *) rgInstr[DCVOLT1_ID])->cfg]); 
                                 odata[0].cb += strlen(rgCFGNames[((IDHDR *) rgInstr[DCVOLT1_ID])->cfg]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalIdealA, sizeof(szCalIdealA)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalIdealA, sizeof(szCalIdealA)-1); 
                                 odata[0].cb += sizeof(szCalIdealA)-1;
-                                itoa(dcT.A, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(dcT.A, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalActualA, sizeof(szCalActualA)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalActualA, sizeof(szCalActualA)-1); 
                                 odata[0].cb += sizeof(szCalActualA)-1;
-                                itoa(((DCVOLT *) rgInstr[DCVOLT1_ID])->A, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(((DCVOLT *) rgInstr[DCVOLT1_ID])->A, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalDiffA, sizeof(szCalDiffA)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalDiffA, sizeof(szCalDiffA)-1); 
                                 odata[0].cb += sizeof(szCalDiffA)-1;
-                                GetPercent(dcT.A - ((DCVOLT *) rgInstr[DCVOLT1_ID])->A, dcT.A, 4, &rgchOut[odata[0].cb], 8);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                GetPercent(dcT.A - ((DCVOLT *) rgInstr[DCVOLT1_ID])->A, dcT.A, 4, &pchJSONRespBuff[odata[0].cb], 8);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalIdealB, sizeof(szCalIdealB)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalIdealB, sizeof(szCalIdealB)-1); 
                                 odata[0].cb += sizeof(szCalIdealB)-1;
-                                itoa(dcT.B, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(dcT.B, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalActualB, sizeof(szCalActualB)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalActualB, sizeof(szCalActualB)-1); 
                                 odata[0].cb += sizeof(szCalActualB)-1;
-                                itoa(((DCVOLT *) rgInstr[DCVOLT1_ID])->B, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(((DCVOLT *) rgInstr[DCVOLT1_ID])->B, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalDiffB, sizeof(szCalDiffB)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalDiffB, sizeof(szCalDiffB)-1); 
                                 odata[0].cb += sizeof(szCalDiffB)-1;
-                                GetPercent(dcT.B - ((DCVOLT *) rgInstr[DCVOLT1_ID])->B, dcT.B, 4, &rgchOut[odata[0].cb], 8);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                GetPercent(dcT.B - ((DCVOLT *) rgInstr[DCVOLT1_ID])->B, dcT.B, 4, &pchJSONRespBuff[odata[0].cb], 8);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // dc channel 2
-                                memcpy(&rgchOut[odata[0].cb], szDeviceDcCh2, sizeof(szDeviceDcCh2)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceDcCh2, sizeof(szDeviceDcCh2)-1); 
                                 odata[0].cb += sizeof(szDeviceDcCh2)-1;
-                                strcpy(&rgchOut[odata[0].cb], rgCFGNames[((IDHDR *) rgInstr[DCVOLT2_ID])->cfg]); 
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgCFGNames[((IDHDR *) rgInstr[DCVOLT2_ID])->cfg]); 
                                 odata[0].cb += strlen(rgCFGNames[((IDHDR *) rgInstr[DCVOLT2_ID])->cfg]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalIdealA, sizeof(szCalIdealA)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalIdealA, sizeof(szCalIdealA)-1); 
                                 odata[0].cb += sizeof(szCalIdealA)-1;
-                                itoa(dcT.A, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(dcT.A, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalActualA, sizeof(szCalActualA)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalActualA, sizeof(szCalActualA)-1); 
                                 odata[0].cb += sizeof(szCalActualA)-1;
-                                itoa(((DCVOLT *) rgInstr[DCVOLT2_ID])->A, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(((DCVOLT *) rgInstr[DCVOLT2_ID])->A, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalDiffA, sizeof(szCalDiffA)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalDiffA, sizeof(szCalDiffA)-1); 
                                 odata[0].cb += sizeof(szCalDiffA)-1;
-                                GetPercent(dcT.A - ((DCVOLT *) rgInstr[DCVOLT2_ID])->A, dcT.A, 4, &rgchOut[odata[0].cb], 8);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                GetPercent(dcT.A - ((DCVOLT *) rgInstr[DCVOLT2_ID])->A, dcT.A, 4, &pchJSONRespBuff[odata[0].cb], 8);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalIdealB, sizeof(szCalIdealB)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalIdealB, sizeof(szCalIdealB)-1); 
                                 odata[0].cb += sizeof(szCalIdealB)-1;
-                                itoa(dcT.B, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(dcT.B, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalActualB, sizeof(szCalActualB)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalActualB, sizeof(szCalActualB)-1); 
                                 odata[0].cb += sizeof(szCalActualB)-1;
-                                itoa(((DCVOLT *) rgInstr[DCVOLT2_ID])->B, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(((DCVOLT *) rgInstr[DCVOLT2_ID])->B, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalDiffB, sizeof(szCalDiffB)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalDiffB, sizeof(szCalDiffB)-1); 
                                 odata[0].cb += sizeof(szCalDiffB)-1;
-                                GetPercent(dcT.B - ((DCVOLT *) rgInstr[DCVOLT2_ID])->B, dcT.B, 4, &rgchOut[odata[0].cb], 8);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                GetPercent(dcT.B - ((DCVOLT *) rgInstr[DCVOLT2_ID])->B, dcT.B, 4, &pchJSONRespBuff[odata[0].cb], 8);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
 								// osc channels
-								memcpy(&rgchOut[odata[0].cb], szDeviceOscCh, sizeof(szDeviceOscCh)-1); 
+								memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceOscCh, sizeof(szDeviceOscCh)-1); 
 								odata[0].cb += sizeof(szDeviceOscCh)-1;
 
 								for(id = OSC1_ID; id <= OSC2_ID; id += 2)
 								{
-									memcpy(&rgchOut[odata[0].cb], arszChannels[(id-OSC1_ID)/2], (cb = strlen(arszChannels[(id-OSC1_ID)/2]))); 
+									memcpy(&pchJSONRespBuff[odata[0].cb], arszChannels[(id-OSC1_ID)/2], (cb = strlen(arszChannels[(id-OSC1_ID)/2]))); 
 									odata[0].cb += cb;
 
-									memcpy(&rgchOut[odata[0].cb], szSource, sizeof(szSource)-1); 
+									memcpy(&pchJSONRespBuff[odata[0].cb], szSource, sizeof(szSource)-1); 
 									odata[0].cb += sizeof(szSource)-1;
-									strcpy(&rgchOut[odata[0].cb], rgCFGNames[((IDHDR *) rgInstr[id])->cfg]); 
+									strcpy(&pchJSONRespBuff[odata[0].cb], rgCFGNames[((IDHDR *) rgInstr[id])->cfg]); 
 									odata[0].cb += strlen(rgCFGNames[((IDHDR *) rgInstr[id])->cfg]);
 
-									memcpy(&rgchOut[odata[0].cb], szCalGain, sizeof(szCalGain)-1); 
+									memcpy(&pchJSONRespBuff[odata[0].cb], szCalGain, sizeof(szCalGain)-1); 
 									odata[0].cb += sizeof(szCalGain)-1;
 
 									for(ig = 0; ig < 4; ig++)
 									{
-										memcpy(&rgchOut[odata[0].cb], arszCalGains[ig], (cb = strlen(arszCalGains[ig]))); 
+										memcpy(&pchJSONRespBuff[odata[0].cb], arszCalGains[ig], (cb = strlen(arszCalGains[ig]))); 
 										odata[0].cb += cb;
 
-										memcpy(&rgchOut[odata[0].cb], szCalOSCIdealA, sizeof(szCalOSCIdealA)-1); 
+										memcpy(&pchJSONRespBuff[odata[0].cb], szCalOSCIdealA, sizeof(szCalOSCIdealA)-1); 
 										odata[0].cb += sizeof(szCalOSCIdealA)-1;
-										itoa(oscT.rgGCal[ig].A, &rgchOut[odata[0].cb], 10);
-										odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+										itoa(oscT.rgGCal[ig].A, &pchJSONRespBuff[odata[0].cb], 10);
+										odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-										memcpy(&rgchOut[odata[0].cb], szCalActualA, sizeof(szCalActualA)-1); 
+										memcpy(&pchJSONRespBuff[odata[0].cb], szCalActualA, sizeof(szCalActualA)-1); 
 										odata[0].cb += sizeof(szCalActualA)-1;
-										itoa(((OSC *) rgInstr[id])->rgGCal[ig].A, &rgchOut[odata[0].cb], 10);
-										odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+										itoa(((OSC *) rgInstr[id])->rgGCal[ig].A, &pchJSONRespBuff[odata[0].cb], 10);
+										odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-										memcpy(&rgchOut[odata[0].cb], szCalDiffA, sizeof(szCalDiffA)-1); 
+										memcpy(&pchJSONRespBuff[odata[0].cb], szCalDiffA, sizeof(szCalDiffA)-1); 
 										odata[0].cb += sizeof(szCalDiffA)-1;
-										GetPercent(oscT.rgGCal[ig].A - ((OSC *) rgInstr[id])->rgGCal[ig].A,oscT.rgGCal[ig].A, 4, &rgchOut[odata[0].cb], 8);
-										odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+										GetPercent(oscT.rgGCal[ig].A - ((OSC *) rgInstr[id])->rgGCal[ig].A,oscT.rgGCal[ig].A, 4, &pchJSONRespBuff[odata[0].cb], 8);
+										odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-										memcpy(&rgchOut[odata[0].cb], szCalIdealB, sizeof(szCalIdealB)-1); 
+										memcpy(&pchJSONRespBuff[odata[0].cb], szCalIdealB, sizeof(szCalIdealB)-1); 
 										odata[0].cb += sizeof(szCalIdealB)-1;
-										itoa(oscT.rgGCal[ig].B, &rgchOut[odata[0].cb], 10);
-										odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+										itoa(oscT.rgGCal[ig].B, &pchJSONRespBuff[odata[0].cb], 10);
+										odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-										memcpy(&rgchOut[odata[0].cb], szCalActualB, sizeof(szCalActualB)-1); 
+										memcpy(&pchJSONRespBuff[odata[0].cb], szCalActualB, sizeof(szCalActualB)-1); 
 										odata[0].cb += sizeof(szCalActualB)-1;
-										itoa(((OSC *) rgInstr[id])->rgGCal[ig].B, &rgchOut[odata[0].cb], 10);
-										odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+										itoa(((OSC *) rgInstr[id])->rgGCal[ig].B, &pchJSONRespBuff[odata[0].cb], 10);
+										odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-										memcpy(&rgchOut[odata[0].cb], szCalDiffB, sizeof(szCalDiffB)-1); 
+										memcpy(&pchJSONRespBuff[odata[0].cb], szCalDiffB, sizeof(szCalDiffB)-1); 
 										odata[0].cb += sizeof(szCalDiffB)-1;
-										GetPercent(oscT.rgGCal[ig].B - ((OSC *) rgInstr[id])->rgGCal[ig].B, oscT.rgGCal[ig].B, 4, &rgchOut[odata[0].cb], 8);
-										odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+										GetPercent(oscT.rgGCal[ig].B - ((OSC *) rgInstr[id])->rgGCal[ig].B, oscT.rgGCal[ig].B, 4, &pchJSONRespBuff[odata[0].cb], 8);
+										odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-										memcpy(&rgchOut[odata[0].cb], szCalIdealC, sizeof(szCalIdealC)-1); 
+										memcpy(&pchJSONRespBuff[odata[0].cb], szCalIdealC, sizeof(szCalIdealC)-1); 
 										odata[0].cb += sizeof(szCalIdealC)-1;
-										itoa(oscT.rgGCal[ig].C, &rgchOut[odata[0].cb], 10);
-										odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+										itoa(oscT.rgGCal[ig].C, &pchJSONRespBuff[odata[0].cb], 10);
+										odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-										memcpy(&rgchOut[odata[0].cb], szCalActualC, sizeof(szCalActualC)-1); 
+										memcpy(&pchJSONRespBuff[odata[0].cb], szCalActualC, sizeof(szCalActualC)-1); 
 										odata[0].cb += sizeof(szCalActualC)-1;
-										itoa(((OSC *) rgInstr[id])->rgGCal[ig].C, &rgchOut[odata[0].cb], 10);
-										odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+										itoa(((OSC *) rgInstr[id])->rgGCal[ig].C, &pchJSONRespBuff[odata[0].cb], 10);
+										odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-										memcpy(&rgchOut[odata[0].cb], szCalDiffC, sizeof(szCalDiffC)-1); 
+										memcpy(&pchJSONRespBuff[odata[0].cb], szCalDiffC, sizeof(szCalDiffC)-1); 
 										odata[0].cb += sizeof(szCalDiffC)-1;
-										GetPercent(oscT.rgGCal[ig].C - ((OSC *) rgInstr[id])->rgGCal[ig].C, oscT.rgGCal[ig].C, 4, &rgchOut[odata[0].cb], 8);
-										odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+										GetPercent(oscT.rgGCal[ig].C - ((OSC *) rgInstr[id])->rgGCal[ig].C, oscT.rgGCal[ig].C, 4, &pchJSONRespBuff[odata[0].cb], 8);
+										odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 									}
 
-									memcpy(&rgchOut[odata[0].cb], szCalEndGains, sizeof(szCalEndGains)-1); 
+									memcpy(&pchJSONRespBuff[odata[0].cb], szCalEndGains, sizeof(szCalEndGains)-1); 
 									odata[0].cb += sizeof(szCalEndGains)-1;
 								}
 
                                 // awg channel 1
-                                memcpy(&rgchOut[odata[0].cb], szDeviceAwgCh1, sizeof(szDeviceAwgCh1)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceAwgCh1, sizeof(szDeviceAwgCh1)-1); 
                                 odata[0].cb += sizeof(szDeviceAwgCh1)-1;
-                                strcpy(&rgchOut[odata[0].cb], rgCFGNames[((IDHDR *) rgInstr[AWG1_ID])->cfg]); 
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgCFGNames[((IDHDR *) rgInstr[AWG1_ID])->cfg]); 
                                 odata[0].cb += strlen(rgCFGNames[((IDHDR *) rgInstr[AWG1_ID])->cfg]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalIdealA, sizeof(szCalIdealA)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalIdealA, sizeof(szCalIdealA)-1); 
                                 odata[0].cb += sizeof(szCalIdealA)-1;
-                                itoa(awgT.A, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(awgT.A, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalActualA, sizeof(szCalActualA)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalActualA, sizeof(szCalActualA)-1); 
                                 odata[0].cb += sizeof(szCalActualA)-1;
-                                itoa(((AWG *) rgInstr[AWG1_ID])->A, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(((AWG *) rgInstr[AWG1_ID])->A, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalDiffA, sizeof(szCalDiffA)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalDiffA, sizeof(szCalDiffA)-1); 
                                 odata[0].cb += sizeof(szCalDiffA)-1;
-                                GetPercent(awgT.A - ((AWG *) rgInstr[AWG1_ID])->A, awgT.A, 4, &rgchOut[odata[0].cb], 8);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                GetPercent(awgT.A - ((AWG *) rgInstr[AWG1_ID])->A, awgT.A, 4, &pchJSONRespBuff[odata[0].cb], 8);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalIdealB, sizeof(szCalIdealB)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalIdealB, sizeof(szCalIdealB)-1); 
                                 odata[0].cb += sizeof(szCalIdealB)-1;
-                                itoa(awgT.B, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(awgT.B, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalActualB, sizeof(szCalActualB)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalActualB, sizeof(szCalActualB)-1); 
                                 odata[0].cb += sizeof(szCalActualB)-1;
-                                itoa(((AWG *) rgInstr[AWG1_ID])->B, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(((AWG *) rgInstr[AWG1_ID])->B, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
-                                memcpy(&rgchOut[odata[0].cb], szCalDiffB, sizeof(szCalDiffB)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szCalDiffB, sizeof(szCalDiffB)-1); 
                                 odata[0].cb += sizeof(szCalDiffB)-1;
-                                GetPercent(awgT.B - ((AWG *) rgInstr[AWG1_ID])->B, awgT.B, 4, &rgchOut[odata[0].cb], 8);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                GetPercent(awgT.B - ((AWG *) rgInstr[AWG1_ID])->B, awgT.B, 4, &pchJSONRespBuff[odata[0].cb], 8);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // end calibrationData
-                                memcpy(&rgchOut[odata[0].cb], szDeviceCalDataEnd, sizeof(szDeviceCalDataEnd)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceCalDataEnd, sizeof(szDeviceCalDataEnd)-1); 
                                 odata[0].cb += sizeof(szDeviceCalDataEnd)-1;
 
                             }
@@ -1396,11 +2973,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             if(!(pjcmd.iCal.state.processing == Idle || pjcmd.iCal.state.processing == NotCfgForCalibration))
                             {
                                 // Put out the error status
-                                utoa(CFGCalibrating, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(CFGCalibrating, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
 
                                 // we aren't doing anything
@@ -1411,11 +2988,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             else if(!AreInstrumentsIdle())
                             {
                                 // Put out the error status
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
 
                                 // we aren't doing anything
@@ -1437,10 +3014,10 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 pjcmd.ioscCh2.state.processing  = Calibrating;
 
                                 // status code
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
 
                                 // wait 30000
-                                memcpy(&rgchOut[odata[0].cb], szWaitCalTime, sizeof(szWaitCalTime)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWaitCalTime, sizeof(szWaitCalTime)-1); 
                                 odata[0].cb += sizeof(szWaitCalTime)-1;
                             }
                             break;
@@ -1452,11 +3029,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             if( pjcmd.iCal.config == CFGSD && !DFATFS::fsvolmounted(DFATFS::szFatFsVols[VOLSD]))
                             {
                                 // Put out the error status
-                                utoa(NoSDCard, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(NoSDCard, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
 
                                 // we aren't doing anything
@@ -1467,11 +3044,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             else if(pjcmd.iCal.state.parsing == JSPARCalibrationLoad && !AreInstrumentsIdle())
                             {
                                 // Put out the error status
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
 
                                 // we aren't doing anything
@@ -1483,10 +3060,10 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             else if((pjcmd.iCal.config == CFGSD || pjcmd.iCal.config == CFGFLASH) && pjcmd.iCal.state.processing == Idle)
                             {
                                 // status code
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
 
                                 // wait 500
-                                memcpy(&rgchOut[odata[0].cb], szWait500, sizeof(szWait500)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait500, sizeof(szWait500)-1); 
                                 odata[0].cb += sizeof(szWait500)-1;
 
                                 // Either load or save
@@ -1495,11 +3072,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             else
                             {
                                 // Put out the error status
-                                utoa(NotCfgForCalibration, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(NotCfgForCalibration, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
 
                                 // we aren't doing anything
@@ -1508,7 +3085,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             break;
                     }
 
-                    stateEndArray = OSPARDeviceEndArray;
+                    stateEndArray = OSPARTopEndArray;
                     stateValueSep = OSPARSeparatedObject;
                     state = OSPARSkipValueSep;
                 }
@@ -1520,7 +3097,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARDeviceNicList:
                 if(jsonToken == tokStringValue)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szNicList, sizeof(szNicList)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szNicList, sizeof(szNicList)-1); 
                     odata[0].cb += sizeof(szNicList)-1;
 
                     // get next member name
@@ -1536,7 +3113,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     iWiFiT.state.parsing = JSPARNicGetStatus;
 
                     // put out the save commmand
-                    memcpy(&rgchOut[odata[0].cb], szDeviceNicGetStatus, sizeof(szDeviceNicGetStatus)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceNicGetStatus, sizeof(szDeviceNicGetStatus)-1); 
                     odata[0].cb += sizeof(szDeviceNicGetStatus)-1;
 
                     // get next member name
@@ -1560,7 +3137,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     iWiFiT.state.parsing = JSPARNicConnect;
 
                     // put out the save command
-                    memcpy(&rgchOut[odata[0].cb], szDeviceNicConnect, sizeof(szDeviceNicConnect)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceNicConnect, sizeof(szDeviceNicConnect)-1); 
                     odata[0].cb += sizeof(szDeviceNicConnect)-1;
 
                     // get next member name
@@ -1592,7 +3169,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     iWiFiT.state.parsing = JSPARNicDisconnect;
 
                     // put out the save command
-                    memcpy(&rgchOut[odata[0].cb], szDeviceNicDisconnect, sizeof(szDeviceNicDisconnect)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceNicDisconnect, sizeof(szDeviceNicDisconnect)-1); 
                     odata[0].cb += sizeof(szDeviceNicDisconnect)-1;
 
                     // get next member name
@@ -1608,7 +3185,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     iWiFiT.state.parsing = JSPARWiFiScan;
 
                     // put out the save command
-                    memcpy(&rgchOut[odata[0].cb], szDeviceWiFiScan, sizeof(szDeviceWiFiScan)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiScan, sizeof(szDeviceWiFiScan)-1); 
                     odata[0].cb += sizeof(szDeviceWiFiScan)-1;
 
                     // get next member name
@@ -1624,7 +3201,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     iWiFiT.state.parsing = JSPARWiFiListScan;
 
                     // put out the save command
-                    memcpy(&rgchOut[odata[0].cb], szDeviceWiFiListScan, sizeof(szDeviceWiFiListScan)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiListScan, sizeof(szDeviceWiFiListScan)-1); 
                     odata[0].cb += sizeof(szDeviceWiFiListScan)-1;
 
                     // get next member name
@@ -1640,7 +3217,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     iWiFiT.state.parsing = JSPARWiFiSetParameters;
 
                     // put out the save command
-                    memcpy(&rgchOut[odata[0].cb], szDeviceWiFiSetParameters, sizeof(szDeviceWiFiSetParameters)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiSetParameters, sizeof(szDeviceWiFiSetParameters)-1); 
                     odata[0].cb += sizeof(szDeviceWiFiSetParameters)-1;
 
                     // get next member name
@@ -1693,7 +3270,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     iWiFiT.state.parsing = JSPARWiFiSaveParameters;
 
                     // put out the save command
-                    memcpy(&rgchOut[odata[0].cb], szDeviceWiFiSaveParameters, sizeof(szDeviceWiFiSaveParameters)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiSaveParameters, sizeof(szDeviceWiFiSaveParameters)-1); 
                     odata[0].cb += sizeof(szDeviceWiFiSaveParameters)-1;
 
                     // get next member name
@@ -1709,7 +3286,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     iWiFiT.state.parsing = JSPARWiFiLoadParameters;
 
                     // put out the save command
-                    memcpy(&rgchOut[odata[0].cb], szDeviceWiFiLoadParameters, sizeof(szDeviceWiFiLoadParameters)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiLoadParameters, sizeof(szDeviceWiFiLoadParameters)-1); 
                     odata[0].cb += sizeof(szDeviceWiFiLoadParameters)-1;
 
                     // get next member name
@@ -1725,7 +3302,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     iWiFiT.state.parsing = JSPARWiFiDeleteParameters;
 
                     // put out the save command
-                    memcpy(&rgchOut[odata[0].cb], szDeviceWiFiDeleteParameters, sizeof(szDeviceWiFiDeleteParameters)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiDeleteParameters, sizeof(szDeviceWiFiDeleteParameters)-1); 
                     odata[0].cb += sizeof(szDeviceWiFiDeleteParameters)-1;
 
                     // get next member name
@@ -1741,7 +3318,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARDeviceStorageLocation:
                 if(jsonToken == tokStringValue)
                 {
-                    iWiFiT.vol = (VOLTYPE) Uint32FromStr(rgStrU32DeviceStorageLocation, sizeof(rgStrU32DeviceStorageLocation) / sizeof(STRU32), szToken, cbToken, (STATE) VOLFLASH);
+                    iWiFiT.vol = (VOLTYPE) Uint32FromStr(rgStrU32FileVol, sizeof(rgStrU32FileVol) / sizeof(STRU32), szToken, cbToken, (STATE) VOLFLASH);
                     state = OSPARSkipValueSep;
                 }
                 break;
@@ -1752,7 +3329,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     iWiFiT.state.parsing = JSPARWiFiListSavedParameters;
 
                     // put out the save command
-                    memcpy(&rgchOut[odata[0].cb], szDeviceWiFiListSavedParameters, sizeof(szDeviceWiFiListSavedParameters)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiListSavedParameters, sizeof(szDeviceWiFiListSavedParameters)-1); 
                     odata[0].cb += sizeof(szDeviceWiFiListSavedParameters)-1;
 
                     // get next member name
@@ -1773,8 +3350,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             if(iWiFiT.szSSID[0] =='\0')
                             {
                                 // Put out the error status
-                                utoa(NoSSIDConfigured, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(NoSSIDConfigured, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
                             else
                             {
@@ -1782,7 +3359,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 {
                                     case DEWF_SECURITY_OPEN:
                                         // status code
-                                       rgchOut[odata[0].cb++] = '0';
+                                       pchJSONRespBuff[odata[0].cb++] = '0';
 
                                        // save the new one away
                                        strcpy(iWiFiT.wifiWConn.ssid, iWiFiT.szSSID);
@@ -1795,7 +3372,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                         if(strlen(iWiFiT.szPassphrase) > 0 && deIPcK.wpaCalPSK(iWiFiT.szSSID, iWiFiT.szPassphrase, iWiFiT.wifiWConn.key.wpa2Key))
                                         {
                                             // status code
-                                            rgchOut[odata[0].cb++] = '0';
+                                            pchJSONRespBuff[odata[0].cb++] = '0';
 
                                             // save the new one away
                                             strcpy(iWiFiT.wifiWConn.ssid, iWiFiT.szSSID);
@@ -1805,21 +3382,21 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                         else
                                         {
                                             // Put out the error status
-                                            utoa(UnableToGenKey, &rgchOut[odata[0].cb], 10);
-                                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                            utoa(UnableToGenKey, &pchJSONRespBuff[odata[0].cb], 10);
+                                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                         }
                                         break;
 
                                     default:
                                         // Put out the error status
-                                        utoa(Unimplemented, &rgchOut[odata[0].cb], 10);
-                                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                        utoa(Unimplemented, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                         break;
                                 }
                             }
 
                             // wait 0
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
                             break;
 
@@ -1828,22 +3405,22 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             if(pjcmd.iWiFi.state.processing != Idle || dWiFiFile)
                             {
                                 // we are work on something else
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // we are done, no waiting required
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;                                  
                             }
 
                             else if(pjcmd.iWiFi.wifiWConn.ssid[0] =='\0')
                             {
                                 // Put out the error status
-                                utoa(NoSSIDConfigured, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(NoSSIDConfigured, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // we are done, no waiting required
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;                                  
                             }
 
@@ -1851,11 +3428,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             else if( iWiFiT.vol == VOLSD && !DFATFS::fsvolmounted(DFATFS::szFatFsVols[VOLSD]))
                             {
                                 // Put out the error status
-                                utoa(NoSDCard, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(NoSDCard, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
                             }
 
@@ -1866,10 +3443,10 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 pjcmd.iWiFi.vol = iWiFiT.vol;
 
                                 // status code
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
 
                                 // wait 500
-                                memcpy(&rgchOut[odata[0].cb], szWait500, sizeof(szWait500)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait500, sizeof(szWait500)-1); 
                                 odata[0].cb += sizeof(szWait500)-1;
                             }
                             break;
@@ -1879,22 +3456,22 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             if(pjcmd.iWiFi.state.processing != Idle || dWiFiFile)
                             {
                                 // we are work on something else
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // we are done, no waiting required
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;                                  
                             }
 
                             else if(iWiFiT.szSSID[0] =='\0')
                             {
                                 // Put out the error status
-                                utoa(NoSSIDConfigured, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(NoSSIDConfigured, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // we are done, no waiting required
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;                                  
                             }
 
@@ -1906,10 +3483,10 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 pjcmd.iWiFi.state.processing = JSPARWiFiLoadParameters;
 
                                 // status code
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
 
                                 // wait 500
-                                memcpy(&rgchOut[odata[0].cb], szWait500, sizeof(szWait500)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait500, sizeof(szWait500)-1); 
                                 odata[0].cb += sizeof(szWait500)-1;
                             }
                             break;
@@ -1919,11 +3496,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             if(pjcmd.iWiFi.state.processing != Idle || dWiFiFile)
                             {
                                 // we are work on something else
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // we are done, no waiting required
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;                                  
                             }
 
@@ -1933,11 +3510,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     (fr = DDIRINFO::fsopendir(DFATFS::szFatFsVols[iWiFiT.vol])) != FR_OK    ) 
                             {
                                 // Put out the error status
-                                utoa((CFGMountError | fr), &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa((CFGMountError | fr), &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
                             }
 
@@ -1957,10 +3534,10 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 cbsz = strlen(sz);
 
                                 // status code
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
 
                                 // put out the parameter Set
-                                memcpy(&rgchOut[odata[0].cb], szDeviceWiFiParameterSet, sizeof(szDeviceWiFiParameterSet)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiParameterSet, sizeof(szDeviceWiFiParameterSet)-1); 
                                 odata[0].cb += sizeof(szDeviceWiFiParameterSet)-1;
 
                                 // always assign a valid filename location to put the long filename in
@@ -1993,39 +3570,39 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                                 dWiFiFile.fsread(&iWiFiT.wifiWConn, cbReadIn, &cbRead) == FR_OK && 
                                                 cbRead == cbReadIn                                              )
                                             {
-                                                rgchOut[odata[0].cb++] = '{';
+                                                pchJSONRespBuff[odata[0].cb++] = '{';
                                                 
                                                 // put out the ssid
-                                                memcpy(&rgchOut[odata[0].cb], szDeviceWiFiSSID, sizeof(szDeviceWiFiSSID)-1); 
+                                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiSSID, sizeof(szDeviceWiFiSSID)-1); 
                                                 odata[0].cb += sizeof(szDeviceWiFiSSID)-1;
-                                                strcpy(&rgchOut[odata[0].cb], &szFile[cbsz+1]);
-                                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                                strcpy(&pchJSONRespBuff[odata[0].cb], &szFile[cbsz+1]);
+                                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                                 // put out the securitye type
-                                                memcpy(&rgchOut[odata[0].cb], szDeviceWiFiSecurityType, sizeof(szDeviceWiFiSecurityType)-1); 
+                                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiSecurityType, sizeof(szDeviceWiFiSecurityType)-1); 
                                                 odata[0].cb += sizeof(szDeviceWiFiSecurityType)-1;
-                                                strcpy(&rgchOut[odata[0].cb], rgszSecurityMode[iWiFiT.wifiWConn.wifiKey]);
+                                                strcpy(&pchJSONRespBuff[odata[0].cb], rgszSecurityMode[iWiFiT.wifiWConn.wifiKey]);
                                                 odata[0].cb += strlen(rgszSecurityMode[iWiFiT.wifiWConn.wifiKey]);
 
                                                 // put out the autoConnect 
-                                                memcpy(&rgchOut[odata[0].cb], szDeviceWiFiAutoConnect, sizeof(szDeviceWiFiAutoConnect)-1); 
+                                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiAutoConnect, sizeof(szDeviceWiFiAutoConnect)-1); 
                                                 odata[0].cb += sizeof(szDeviceWiFiAutoConnect)-1;
 
                                                 // auto connect
                                                 if(iWiFiT.wifiWConn.comhdr.activeFunc == WIFIFnAutoConnect)
                                                 {
-                                                    memcpy(&rgchOut[odata[0].cb], "true", 4);
+                                                    memcpy(&pchJSONRespBuff[odata[0].cb], "true", 4);
                                                     odata[0].cb += 4;
                                                 }
                                                 else
                                                 {
-                                                   memcpy(&rgchOut[odata[0].cb], "false", 5);
+                                                   memcpy(&pchJSONRespBuff[odata[0].cb], "false", 5);
                                                    odata[0].cb += 5;
                                                 }
 
                                                 // close up the object
-                                                rgchOut[odata[0].cb++] = '}';
-                                                rgchOut[odata[0].cb++] = ',';
+                                                pchJSONRespBuff[odata[0].cb++] = '}';
+                                                pchJSONRespBuff[odata[0].cb++] = ',';
                                             }
 
                                         dWiFiFile.fsclose();
@@ -2034,9 +3611,9 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 } while(szFile != NULL);
 
                                 // take out the last ,
-                                if(rgchOut[odata[0].cb-1] == ',') odata[0].cb--;
-                                rgchOut[odata[0].cb++] = ']';
-                                rgchOut[odata[0].cb++] = '}';
+                                if(pchJSONRespBuff[odata[0].cb-1] == ',') odata[0].cb--;
+                                pchJSONRespBuff[odata[0].cb++] = ']';
+                                pchJSONRespBuff[odata[0].cb++] = '}';
 
                                 DDIRINFO::fsclosedir();
                             }
@@ -2047,22 +3624,22 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             if(pjcmd.iWiFi.state.processing != Idle || dWiFiFile)
                             {
                                 // we are work on something else
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // we are done, no waiting required
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;                                  
                             }
 
                             else if(iWiFiT.szSSID[0] =='\0')
                             {
                                 // Put out the error status
-                                utoa(NoSSIDConfigured, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(NoSSIDConfigured, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // we are done, no waiting required
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;                                  
                             }
 
@@ -2080,30 +3657,30 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                    (fr = DFATFS::DFATFS::fsunlink(sz)) == FR_OK                         )
                                 {
                                     // status code
-                                    rgchOut[odata[0].cb++] = '0';
+                                    pchJSONRespBuff[odata[0].cb++] = '0';
                                 }
 
                                 // else, something didn't work
                                 else
                                 {
                                     // Put out the error status
-                                    utoa((CFGFileSystemError | fr), &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa((CFGFileSystemError | fr), &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                }
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
                             }
                             break;
 
                         default:
                             // Put out the error status
-                            utoa(InvalidSyntax, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            utoa(InvalidSyntax, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // wait 0
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
                             break;
                     }
@@ -2111,7 +3688,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     // restore for the next WiFi command, we may be in a multi command
                     memcpy(&iWiFiT, &pjcmd.iWiFi, sizeof(IWIFI));
 
-                    stateEndArray = OSPARDeviceEndArray;
+                    stateEndArray = OSPARTopEndArray;
                     stateValueSep = OSPARSeparatedObject;
                     state = OSPARSkipValueSep;
                 }
@@ -2127,31 +3704,31 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         char szIpAddr[32];
                         
                         // status code
-                        rgchOut[odata[0].cb++] = '0';
+                        pchJSONRespBuff[odata[0].cb++] = '0';
 
                         switch(iWiFiT.state.parsing)
                         {
                             case JSPARNicGetStatus:
 
                                 // wait 0, but do not inculded the closing brace
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-2); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-2); 
                                 odata[0].cb += sizeof(szWait0)-2;
 
                                 // put out the adaptor
-                                memcpy(&rgchOut[odata[0].cb], szDeviceNicAdp, sizeof(szDeviceNicAdp)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceNicAdp, sizeof(szDeviceNicAdp)-1); 
                                 odata[0].cb += sizeof(szDeviceNicAdp)-1;
-                                strcpy(&rgchOut[odata[0].cb], rgszAdapter[iWiFiT.nicADP]);
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgszAdapter[iWiFiT.nicADP]);
                                 odata[0].cb += strlen(rgszAdapter[iWiFiT.nicADP]);
  
                                 // put out the security type
-                                memcpy(&rgchOut[odata[0].cb], szDeviceNicSecurityType, sizeof(szDeviceNicSecurityType)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceNicSecurityType, sizeof(szDeviceNicSecurityType)-1); 
                                 odata[0].cb += sizeof(szDeviceNicSecurityType)-1;
-                                strcpy(&rgchOut[odata[0].cb], rgszSecurityMode[wifiConn.wifiKey]);
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgszSecurityMode[wifiConn.wifiKey]);
                                 odata[0].cb += strlen(rgszSecurityMode[wifiConn.wifiKey]);
-                                rgchOut[odata[0].cb++] = '\"';
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
 
                                 // put out the status
-                                memcpy(&rgchOut[odata[0].cb], szDeviceNicStatus, sizeof(szDeviceNicStatus)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceNicStatus, sizeof(szDeviceNicStatus)-1); 
                                 odata[0].cb += sizeof(szDeviceNicStatus)-1;                              
 
                                 // status connected or not
@@ -2160,7 +3737,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     IPv4    ipv4;
 
                                     // connected
-                                    memcpy(&rgchOut[odata[0].cb], szDeviceNicConnected, sizeof(szDeviceNicConnected)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceNicConnected, sizeof(szDeviceNicConnected)-1); 
                                     odata[0].cb += sizeof(szDeviceNicConnected)-1;
 
                                     // get my ip, this should not fail
@@ -2172,7 +3749,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     IPv4    ipv4;
 
                                     // disconnected
-                                    memcpy(&rgchOut[odata[0].cb], szDeviceNicDisconnected, sizeof(szDeviceNicDisconnected)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceNicDisconnected, sizeof(szDeviceNicDisconnected)-1); 
                                     odata[0].cb += sizeof(szDeviceNicDisconnected)-1;
 
                                     // put in a null ip
@@ -2185,17 +3762,17 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 // this may have changed since we copied the iWiFi object
                                 // also this could be an empty string if nothing has ever been loaded into the iWiFi object
                                 // but if empty, it should be disconnected
-                                strcpy(&rgchOut[odata[0].cb], wifiConn.ssid);
+                                strcpy(&pchJSONRespBuff[odata[0].cb], wifiConn.ssid);
                                 odata[0].cb += strlen(wifiConn.ssid);
 
                                 // put out the ipaddress
-                                memcpy(&rgchOut[odata[0].cb], szDeviceNicIpAddress, sizeof(szDeviceNicIpAddress)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceNicIpAddress, sizeof(szDeviceNicIpAddress)-1); 
                                 odata[0].cb += sizeof(szDeviceNicIpAddress)-1;                              
-                                strcpy(&rgchOut[odata[0].cb], szIpAddr);
+                                strcpy(&pchJSONRespBuff[odata[0].cb], szIpAddr);
                                 odata[0].cb += strlen(szIpAddr);
 
-                                rgchOut[odata[0].cb++] = '\"';
-                                rgchOut[odata[0].cb++] = '}';
+                                pchJSONRespBuff[odata[0].cb++] = '\"';
+                                pchJSONRespBuff[odata[0].cb++] = '}';
                                 break;
 
                             case JSPARNicDisconnect:
@@ -2207,11 +3784,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     odata[0].cb--;
 
                                     // we are work on something else
-                                    utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // we are done, no waiting required
-                                    memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                     odata[0].cb += sizeof(szWait0)-1;                                  
                                 }
 
@@ -2221,7 +3798,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     pjcmd.iWiFi.state.processing = JSPARNicDisconnect;
 
                                     // wait until
-                                    memcpy(&rgchOut[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
                                     odata[0].cb += sizeof(szWaitUntil)-1;                                  
                                 }
 
@@ -2229,7 +3806,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 else
                                 {
                                     // we are done, no waiting required
-                                    memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                     odata[0].cb += sizeof(szWait0)-1;                                  
                                 }
                                 break;
@@ -2246,11 +3823,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                         odata[0].cb--;
 
                                         // we are work on something else
-                                        utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                        utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                         // we are done, no waiting required
-                                        memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                        memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                         odata[0].cb += sizeof(szWait0)-1;                                  
                                     }
 
@@ -2260,11 +3837,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                         odata[0].cb--;
 
                                         // no SSID is set up
-                                        utoa(InvalidAdapter, &rgchOut[odata[0].cb], 10);
-                                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                        utoa(InvalidAdapter, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                         // we are done, no waiting required
-                                        memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                        memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                         odata[0].cb += sizeof(szWait0)-1;                                  
                                     }
 
@@ -2274,11 +3851,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                         odata[0].cb--;
 
                                         // no SSID is set up
-                                        utoa(NoSSIDConfigured, &rgchOut[odata[0].cb], 10);
-                                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                        utoa(NoSSIDConfigured, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                         // we are done, no waiting required
-                                        memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                        memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                         odata[0].cb += sizeof(szWait0)-1;                                  
                                     }
 
@@ -2296,7 +3873,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                         pjcmd.iWiFi.state.processing = JSPARNicConnect;
 
                                         // wait until
-                                        memcpy(&rgchOut[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
+                                        memcpy(&pchJSONRespBuff[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
                                         odata[0].cb += sizeof(szWaitUntil)-1;                                  
                                     }
 
@@ -2307,11 +3884,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                         odata[0].cb--;
 
                                         // Disconnect first
-                                        utoa(MustBeDisconnected, &rgchOut[odata[0].cb], 10);
-                                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                        utoa(MustBeDisconnected, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                         // we are done, no waiting required
-                                        memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                        memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                         odata[0].cb += sizeof(szWait0)-1;                                  
                                     }
                                 }
@@ -2326,11 +3903,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     odata[0].cb--;
 
                                     // we are work on something else
-                                    utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // we are done, no waiting required
-                                    memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                     odata[0].cb += sizeof(szWait0)-1;                                  
                                 }
 
@@ -2341,11 +3918,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     odata[0].cb--;
 
                                     // we must be disconnect to do a scan
-                                    utoa(MustBeDisconnected, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(MustBeDisconnected, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // we are done, no waiting required
-                                    memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                     odata[0].cb += sizeof(szWait0)-1;                                  
                                 }
 
@@ -2355,7 +3932,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     pjcmd.iWiFi.state.processing = JSPARWiFiScan;
 
                                     // wait until
-                                    memcpy(&rgchOut[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
                                     odata[0].cb += sizeof(szWaitUntil)-1;                                  
                                 }
                                 break;
@@ -2369,11 +3946,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     odata[0].cb--;
 
                                     // we are working on something else
-                                    utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // we are done, no waiting required
-                                    memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                     odata[0].cb += sizeof(szWait0)-1;                                  
                                 }
 
@@ -2382,7 +3959,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     int32_t iNetwork = 0;
 
                                     // wait until
-                                    memcpy(&rgchOut[odata[0].cb], szDeviceWiFiAPs, sizeof(szDeviceWiFiAPs)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiAPs, sizeof(szDeviceWiFiAPs)-1); 
                                     odata[0].cb += sizeof(szDeviceWiFiAPs)-1; 
 
                                     while(iNetwork < pjcmd.iWiFi.wifiScan.cNetworks &&
@@ -2390,23 +3967,23 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     {
                                         SECURITY securityType = DEWF_SECURITY_OPEN;
 
-                                        rgchOut[odata[0].cb++] = '{';
+                                        pchJSONRespBuff[odata[0].cb++] = '{';
 
                                         // SSID
-                                        memcpy(&rgchOut[odata[0].cb], szDeviceWiFiSSID, sizeof(szDeviceWiFiSSID)-1); 
+                                        memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiSSID, sizeof(szDeviceWiFiSSID)-1); 
                                         odata[0].cb += sizeof(szDeviceWiFiSSID)-1; 
 
                                         // some routers broadcast 32 bytes of 0 for an SSID if no SSID is broadcasted.
                                         if(pjcmd.iWiFi.wifiScan.scanInfo.ssid[0] != '\0') 
                                         {
-                                            memcpy(&rgchOut[odata[0].cb], pjcmd.iWiFi.wifiScan.scanInfo.ssid, pjcmd.iWiFi.wifiScan.scanInfo.ssidLen); 
+                                            memcpy(&pchJSONRespBuff[odata[0].cb], pjcmd.iWiFi.wifiScan.scanInfo.ssid, pjcmd.iWiFi.wifiScan.scanInfo.ssidLen); 
                                             odata[0].cb += pjcmd.iWiFi.wifiScan.scanInfo.ssidLen; 
                                         }
 
                                         // BSSID
-                                        memcpy(&rgchOut[odata[0].cb], szDeviceWiFiBSSID, sizeof(szDeviceWiFiBSSID)-1); 
+                                        memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiBSSID, sizeof(szDeviceWiFiBSSID)-1); 
                                         odata[0].cb += sizeof(szDeviceWiFiBSSID)-1; 
-                                        odata[0].cb += GetNumb(pjcmd.iWiFi.wifiScan.scanInfo.bssid, DEWF_BSSID_LENGTH, ':', &rgchOut[odata[0].cb]);
+                                        odata[0].cb += GetNumb(pjcmd.iWiFi.wifiScan.scanInfo.bssid, DEWF_BSSID_LENGTH, ':', &pchJSONRespBuff[odata[0].cb]);
 
                                         // Secruity Type
                                         // get the key type
@@ -2416,34 +3993,34 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                         else                                                                            securityType = DEWF_SECURITY_OPEN;
 
                                         // print out the key type
-                                        memcpy(&rgchOut[odata[0].cb], szDeviceWiFiSecurityType, sizeof(szDeviceWiFiSecurityType)-1); 
+                                        memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiSecurityType, sizeof(szDeviceWiFiSecurityType)-1); 
                                         odata[0].cb += sizeof(szDeviceWiFiSecurityType)-1;
-                                        strcpy(&rgchOut[odata[0].cb], rgszSecurityMode[securityType]); 
+                                        strcpy(&pchJSONRespBuff[odata[0].cb], rgszSecurityMode[securityType]); 
                                         odata[0].cb += strlen(rgszSecurityMode[securityType]);
 
                                         // Channel
-                                        memcpy(&rgchOut[odata[0].cb], szDeviceWiFiChannel, sizeof(szDeviceWiFiChannel)-1); 
+                                        memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiChannel, sizeof(szDeviceWiFiChannel)-1); 
                                         odata[0].cb += sizeof(szDeviceWiFiChannel)-1; 
-                                        utoa(pjcmd.iWiFi.wifiScan.scanInfo.channel, &rgchOut[odata[0].cb], 10);
-                                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                        utoa(pjcmd.iWiFi.wifiScan.scanInfo.channel, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                         // Signal Strength
-                                        memcpy(&rgchOut[odata[0].cb], szDeviceWiFiSignalStrength, sizeof(szDeviceWiFiSignalStrength)-1); 
+                                        memcpy(&pchJSONRespBuff[odata[0].cb], szDeviceWiFiSignalStrength, sizeof(szDeviceWiFiSignalStrength)-1); 
                                         odata[0].cb += sizeof(szDeviceWiFiSignalStrength)-1; 
-                                        utoa(pjcmd.iWiFi.wifiScan.scanInfo.rssi, &rgchOut[odata[0].cb], 10);
-                                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                        utoa(pjcmd.iWiFi.wifiScan.scanInfo.rssi, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                         // finish out this entry
-                                        rgchOut[odata[0].cb++] = '}';
-                                        rgchOut[odata[0].cb++] = ','; 
+                                        pchJSONRespBuff[odata[0].cb++] = '}';
+                                        pchJSONRespBuff[odata[0].cb++] = ','; 
 
                                         iNetwork++;
                                     }
 
                                     // remove the trailing ,
-                                    if(rgchOut[odata[0].cb-1] == ',') odata[0].cb--;
-                                    rgchOut[odata[0].cb++] = ']';
-                                    rgchOut[odata[0].cb++] = '}';
+                                    if(pchJSONRespBuff[odata[0].cb-1] == ',') odata[0].cb--;
+                                    pchJSONRespBuff[odata[0].cb++] = ']';
+                                    pchJSONRespBuff[odata[0].cb++] = '}';
                                 }
 
                                 // no scan data available
@@ -2453,11 +4030,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     odata[0].cb--;
 
                                     // Put out the error status
-                                    utoa(NoScanDataAvailable, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(NoScanDataAvailable, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // wait 0
-                                    memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                     odata[0].cb += sizeof(szWait0)-1;
                                 }
                                 break;
@@ -2466,18 +4043,18 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     else
                     {
                         // Put out the error status
-                        utoa(InvalidAdapter, &rgchOut[odata[0].cb], 10);
-                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                        utoa(InvalidAdapter, &pchJSONRespBuff[odata[0].cb], 10);
+                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                         // wait 0
-                        memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                         odata[0].cb += sizeof(szWait0)-1;
                     }
 
                     // restore for the next WiFi command, we may be in a multi command
                     memcpy(&iWiFiT, &pjcmd.iWiFi, sizeof(IWIFI));
 
-                    stateEndArray = OSPARDeviceEndArray;
+                    stateEndArray = OSPARTopEndArray;
                     stateValueSep = OSPARSeparatedObject;
                     state = OSPARSkipValueSep;
                 }
@@ -2491,7 +4068,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 {
                     rgStrU32 = rgStrU32DcChannel;
                     cStrU32 = sizeof(rgStrU32DcChannel) / sizeof(STRU32);
-                    memcpy(&rgchOut[odata[0].cb], szDcObject, sizeof(szDcObject)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szDcObject, sizeof(szDcObject)-1); 
                     odata[0].cb += sizeof(szDcObject)-1;
                     state = OSPARMemberName;
                 }
@@ -2504,13 +4081,13 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     if(curState == OSPARDcCh1) 
                     {
                         memcpy(&idcT, &pjcmd.idcCh1, sizeof(idcT));
-                        memcpy(&rgchOut[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
                         odata[0].cb += sizeof(szCh1Array)-1;
                     }
                     else 
                     {
                         memcpy(&idcT, &pjcmd.idcCh2, sizeof(idcT));
-                        memcpy(&rgchOut[odata[0].cb], szCh2Array, sizeof(szCh2Array)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szCh2Array, sizeof(szCh2Array)-1); 
                         odata[0].cb += sizeof(szCh2Array)-1;
                     }
 
@@ -2574,7 +4151,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         case JSPARDcGetVoltage:
 
                             // get command
-                            memcpy(&rgchOut[odata[0].cb], szDcGetStatus, sizeof(szDcGetStatus)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szDcGetStatus, sizeof(szDcGetStatus)-1); 
                             odata[0].cb += sizeof(szDcGetStatus)-1;
 
                             if(curProcessState == Idle)
@@ -2588,20 +4165,20 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 if(curState == Idle)
                                 {
                                     // status code
-                                    rgchOut[odata[0].cb++] = '0';
+                                    pchJSONRespBuff[odata[0].cb++] = '0';
  
                                     // voltage
-                                    memcpy(&rgchOut[odata[0].cb], szDcGetVoltage, sizeof(szDcGetVoltage)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szDcGetVoltage, sizeof(szDcGetVoltage)-1); 
                                     odata[0].cb += sizeof(szDcGetVoltage)-1;
 
-                                    itoa((dcVolts + 500) / 1000, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    itoa((dcVolts + 500) / 1000, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 }
                                 else
                                 {
                                     // Put out the error status
-                                    utoa(curState, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(curState, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 }
 
                                 memset(&idcT, 0, sizeof(idcT));
@@ -2609,19 +4186,19 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             else
                             {
                                 // Put out the error status
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
 
                             // wait 0
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
                             break;
 
                         case JSPARDcSetVoltage:
 
                             // get command
-                            memcpy(&rgchOut[odata[0].cb], szDcSetStatus, sizeof(szDcSetStatus)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szDcSetStatus, sizeof(szDcSetStatus)-1); 
                             odata[0].cb += sizeof(szDcSetStatus)-1;
 
                             if(curProcessState == Idle)
@@ -2632,20 +4209,20 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 else memcpy(&pjcmd.idcCh2, &idcT, sizeof(idcT)); 
 
                                 // status code
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
 
                                 // wait 500
-                                memcpy(&rgchOut[odata[0].cb], szWait500, sizeof(szWait500)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait500, sizeof(szWait500)-1); 
                                 odata[0].cb += sizeof(szWait500)-1;
                             }
                             else
                             {
                                 // Put out the error status
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
                             }
                             break;
@@ -2662,7 +4239,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokEndArray) 
                 {
                     // put out end of array
-                    memcpy(&rgchOut[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
                     odata[0].cb += sizeof(szEndArray)-1;
 
                     // reload channel members
@@ -2683,7 +4260,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 {
                     rgStrU32 = rgStrU32AwgChannel;
                     cStrU32 = sizeof(rgStrU32AwgChannel) / sizeof(STRU32);
-                    memcpy(&rgchOut[odata[0].cb], szAwgObject, sizeof(szAwgObject)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szAwgObject, sizeof(szAwgObject)-1); 
                     odata[0].cb += sizeof(szAwgObject)-1;
                     state = OSPARMemberName;
                 }
@@ -2693,7 +4270,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokArray)
                 {
                     memcpy(&iawgT, &pjcmd.iawg, sizeof(iawgT)); 
-                    memcpy(&rgchOut[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
                     odata[0].cb += sizeof(szCh1Array)-1;
 
                     iawgT.state.processing = Idle;
@@ -2718,7 +4295,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokStringValue)
                 {
                     // set regular waveform
-                    memcpy(&rgchOut[odata[0].cb], szAwgSetRegWaveStatus, sizeof(szAwgSetRegWaveStatus)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szAwgSetRegWaveStatus, sizeof(szAwgSetRegWaveStatus)-1); 
                     odata[0].cb += sizeof(szAwgSetRegWaveStatus)-1;
 
                     iawgT.state.parsing = JSPARAwgSetRegularWaveform;
@@ -2730,8 +4307,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokStringValue)
                 {
                     // the get current state command
-                    memcpy(&rgchOut[odata[0].cb], szAwgGetCurrentStateStatus, sizeof(szAwgGetCurrentStateStatus)-1); 
-                    odata[0].cb += sizeof(szAwgGetCurrentStateStatus)-1;                               
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szGetCurrentStateStatusCode, sizeof(szGetCurrentStateStatusCode)-1); 
+                    odata[0].cb += sizeof(szGetCurrentStateStatusCode)-1;                               
 
                     iawgT.state.parsing = JSPARAwgGetCurrentState;
                     state = OSPARSkipValueSep;
@@ -2742,8 +4319,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokStringValue)
                 {
                     // the run command
-                    memcpy(&rgchOut[odata[0].cb], szAwgRunStatus, sizeof(szAwgRunStatus)-1); 
-                    odata[0].cb += sizeof(szAwgRunStatus)-1;                               
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szRunStatus, sizeof(szRunStatus)-1); 
+                    odata[0].cb += sizeof(szRunStatus)-1;                               
 
                     iawgT.state.parsing = JSPARAwgRun;
                     state = OSPARSkipValueSep;
@@ -2754,8 +4331,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokStringValue)
                 {
                     // put out stop command
-                    memcpy(&rgchOut[odata[0].cb], szAwgStopStatus, sizeof(szAwgStopStatus)-1); 
-                    odata[0].cb += sizeof(szAwgStopStatus)-1; 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szStopStatus, sizeof(szStopStatus)-1); 
+                    odata[0].cb += sizeof(szStopStatus)-1; 
 
                     iawgT.state.parsing = JSPARAwgStop;
                     state = OSPARSkipValueSep;
@@ -2835,11 +4412,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 )
                             {
                                     // Put out the error status
-                                    utoa(AWGValueOutOfRange, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(AWGValueOutOfRange, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
 
-                            else if(pjcmd.iawg.state.processing != Running) 
+                            else if(IsAWGIdle() && IsLAIdle()) 
                             {
                                 int32_t cBuff, sps;
                                 int16_t mvTblOffset;
@@ -2852,99 +4429,122 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 iawgT.freq = AWGCalculateBuffAndSps(iawgT.freq, (uint32_t *) &cBuff, (uint32_t *) &sps);
 
                                 // put in the status code
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
 
                                 // return actual freq
-                                memcpy(&rgchOut[odata[0].cb], szActualFreq, sizeof(szActualFreq)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualFreq, sizeof(szActualFreq)-1); 
                                 odata[0].cb += sizeof(szActualFreq)-1;                               
-                                utoa(iawgT.freq, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(iawgT.freq, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // return actual P2P
-                                memcpy(&rgchOut[odata[0].cb], szVpp, sizeof(szVpp)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szVpp, sizeof(szVpp)-1); 
                                 odata[0].cb += sizeof(szVpp)-1;                               
-                                itoa(min(iawgT.mvP2P, AWGMAXP2P), &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(min(iawgT.mvP2P, AWGMAXP2P), &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // return actual Offset
-                                memcpy(&rgchOut[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
                                 odata[0].cb += sizeof(szActualVOffset)-1;                               
-                                itoa(iawgT.mvOffset, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(iawgT.mvOffset, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // queue the request
                                 memcpy(&pjcmd.iawg, &iawgT, sizeof(iawgT)); 
                                 memset(&iawgT, 0, sizeof(iawgT));
+
+                                // set up for regular waveform
                                 pjcmd.iawg.state.processing = JSPARAwgWaitingRegularWaveform;
+
+                                // just kill all competing instruments
+                                pjcmd.ila.state.processing = Idle;
                             }
                             else 
                             {
                                 // Put out the error status
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
 
                             // put parsing back to an Idle state
                             pjcmd.iawg.state.parsing = Idle;
 
                             // return await time
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;                               
                             break;
                         
                         case JSPARAwgGetCurrentState:
  
                             // put in the status code
-                            rgchOut[odata[0].cb++] = '0';
+                            pchJSONRespBuff[odata[0].cb++] = '0';
 
                             // the current state 
-                            memcpy(&rgchOut[odata[0].cb], szState, sizeof(szState)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szState, sizeof(szState)-1); 
                             odata[0].cb += sizeof(szState)-1;
                             switch(pjcmd.iawg.state.processing)
                             {
                                 case Idle:
-                                    strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Idle]);
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Idle]);
                                     break;
 
                                 case Stopped:
                                 case JSPARAwgWaitingRegularWaveform:
                                 case JSPARAwgWaitingArbitraryWaveform:
-                                    strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Stopped]);
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Stopped]);
                                     break;
 
                                 default:
-                                    strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Running]);
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Running]);
                                     break;
                             }
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]); 
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]); 
 
                             // the current wave type 
-                            memcpy(&rgchOut[odata[0].cb], szAwgWaveType, sizeof(szAwgWaveType)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szAwgWaveType, sizeof(szAwgWaveType)-1); 
                             odata[0].cb += sizeof(szAwgWaveType)-1; 
-                            strcpy(&rgchOut[odata[0].cb], rgszAwgWaveforms[pjcmd.iawg.waveform]);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]); 
-                            rgchOut[odata[0].cb++] = '\"';
+                            strcpy(&pchJSONRespBuff[odata[0].cb], rgszAwgWaveforms[pjcmd.iawg.waveform]);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]); 
+                            pchJSONRespBuff[odata[0].cb++] = '\"';
 
                             // the signal frequency 
-                            memcpy(&rgchOut[odata[0].cb], szActualFreq, sizeof(szActualFreq)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualFreq, sizeof(szActualFreq)-1); 
                             odata[0].cb += sizeof(szActualFreq)-1; 
-                            utoa(pjcmd.iawg.freq, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            utoa(pjcmd.iawg.freq, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // return actual P2P
-                            memcpy(&rgchOut[odata[0].cb], szVpp, sizeof(szVpp)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szVpp, sizeof(szVpp)-1); 
                             odata[0].cb += sizeof(szVpp)-1;                               
-                            itoa(min(pjcmd.iawg.mvP2P, AWGMAXP2P), &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            itoa(min(pjcmd.iawg.mvP2P, AWGMAXP2P), &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // return actual Offset
-                            memcpy(&rgchOut[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
                             odata[0].cb += sizeof(szActualVOffset)-1;                               
-                            itoa(pjcmd.iawg.mvOffset, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            itoa(pjcmd.iawg.mvOffset, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+#if 0
+// the value at the feedback
+// this will take about 140us
+{
+    STATE curState;
+    int32_t dcVolts;
+
+    while(!((curState = FBAWGorDCuV(((AWG *) rgInstr[pjcmd.iawg.id])->channelFB, &dcVolts)) == Idle || IsStateAnError(curState)));
+
+    // voltage
+    memcpy(&pchJSONRespBuff[odata[0].cb], szDcGetVoltage, sizeof(szDcGetVoltage)-1); 
+    odata[0].cb += sizeof(szDcGetVoltage)-1;
+
+    itoa((dcVolts + 500) / 1000, &pchJSONRespBuff[odata[0].cb], 10);
+    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+}
+#endif
 
                             // wait 0
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;  
                             break;
 
@@ -2953,29 +4553,28 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             // see if we can run the AWG
                             if((pjcmd.iawg.state.processing == Stopped                              ||
                                 pjcmd.iawg.state.processing == JSPARAwgWaitingRegularWaveform       || 
-                                pjcmd.iawg.state.processing == JSPARAwgWaitingArbitraryWaveform)    &&
-                                IsLAIdle()                                                          ) 
+                                pjcmd.iawg.state.processing == JSPARAwgWaitingArbitraryWaveform)    ) 
                             {
                                 if(pjcmd.iawg.state.processing == JSPARAwgWaitingRegularWaveform)           pjcmd.iawg.state.processing = JSPARAwgRunRegularWaveform;
                                 else if(pjcmd.iawg.state.processing == JSPARAwgWaitingArbitraryWaveform)    pjcmd.iawg.state.processing = JSPARAwgRunArbitraryWaveform;
                                 else                                                                        pjcmd.iawg.state.processing = Run;
  
                                 // put in the status code
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
 
                                 // wait 500 ms
-                                memcpy(&rgchOut[odata[0].cb], szWait500, sizeof(szWait500)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait500, sizeof(szWait500)-1); 
                                 odata[0].cb += sizeof(szWait500)-1;  
                                 
                             }   
                             else 
                             {
                                 // Put out the error status
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;  
 
                             }
@@ -2991,7 +4590,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     pjcmd.iawg.state.processing = Stopped;
 
                                     // put in the status code
-                                    rgchOut[odata[0].cb++] = '0';
+                                    pchJSONRespBuff[odata[0].cb++] = '0';
                                 }
                                 else if(IsStateAnError(pjcmd.iawg.state.instrument))
                                 {
@@ -2999,8 +4598,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     pjcmd.iawg.state.processing = Idle;
 
                                     // Put out the error status
-                                    utoa(pjcmd.iawg.state.instrument, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(pjcmd.iawg.state.instrument, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 }
                             }
 
@@ -3008,8 +4607,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             else if(pjcmd.iawg.state.processing == JSPARAwgRunRegularWaveform || pjcmd.iawg.state.processing == JSPARAwgRunArbitraryWaveform)
                             {
                                 // Put out the error status
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
 
                             // otherwise reset to an Idle condition
@@ -3019,14 +4618,14 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 pjcmd.iawg.state.processing = Idle;
 
                                 // put in the status code
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
                             }
 
                             // put parsing back to an Idle state
                             pjcmd.iawg.state.parsing = Idle;
 
                             // wait 0
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;  
 
                             break;
@@ -3043,7 +4642,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokEndArray) 
                 {
                     // put out end of array
-                    memcpy(&rgchOut[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
                     odata[0].cb += sizeof(szEndArray)-1;
 
                     // reload channel members
@@ -3064,7 +4663,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 {
                     rgStrU32 = rgStrU32OscChannel;
                     cStrU32 = sizeof(rgStrU32OscChannel) / sizeof(STRU32);
-                    memcpy(&rgchOut[odata[0].cb], szOscObject, sizeof(szOscObject)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szOscObject, sizeof(szOscObject)-1); 
                     odata[0].cb += sizeof(szOscObject)-1;
                     state = OSPARMemberName;
                 }
@@ -3077,13 +4676,13 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     if(curState == OSPAROscCh1)
                     {
                         memcpy(&ioscT, &pjcmd.ioscCh1, sizeof(ioscT));
-                        memcpy(&rgchOut[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
                         odata[0].cb += sizeof(szCh1Array)-1;
                     }
                     else if(curState == OSPAROscCh2) 
                     {
                         memcpy(&ioscT, &pjcmd.ioscCh2, sizeof(ioscT));
-                        memcpy(&rgchOut[odata[0].cb], szCh2Array, sizeof(szCh2Array)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szCh2Array, sizeof(szCh2Array)-1); 
                         odata[0].cb += sizeof(szCh2Array)-1;
                     }
 
@@ -3141,7 +4740,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     char szT[32];
                     memcpy(szT, szToken, cbToken);
                     szT[cbToken] = '\0';
-                    ioscT.bidx.msps = atoll(szT);
+                    ioscT.bidx.xsps = atoll(szT);
                     state = OSPARSkipValueSep;
                 }
                 break;
@@ -3229,9 +4828,10 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokEndObject)
                 {
                     int32_t pwm = 0;
+                    IOSC&   iosc    = (ioscT.id == OSC1_ID) ? pjcmd.ioscCh1 : pjcmd.ioscCh2;
 
                     // get the latest in this state, we have a stale state in there
-                    ioscT.state.processing = (ioscT.id == OSC1_ID) ? pjcmd.ioscCh1.state.processing : pjcmd.ioscCh2.state.processing;
+                    ioscT.state.processing = iosc.state.processing;
 
                     // assume we pass this state
                     stateEndArray = OSPAROscChEnd;
@@ -3244,62 +4844,67 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         case JSPARSetParm:
 
                             // put out the command and status
-                            memcpy(&rgchOut[odata[0].cb], szSetParmStatusCode, sizeof(szSetParmStatusCode)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szSetParmStatusCode, sizeof(szSetParmStatusCode)-1); 
                             odata[0].cb += sizeof(szSetParmStatusCode)-1;
 
-                            // are we in a state we can't change the parameters
-                            if(ioscT.buffLock != LOCKAvailable)
-                            {
-                                // Error Code
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
-                            }
-
                             // Do a check of parameter Ranging
-                            else if(    !(1 <= ioscT.gain && ioscT.gain <= 4)                                                                               ||                                        
-                                        !(PWMLOWLIMIT <= (pwm = OSCPWM(((OSC *) rgInstr[ioscT.id]), ioscT.gain, ioscT.mvOffset)) && pwm <= PWMHIGHLIMIT)    ||
-                                        !(MINmSAMPLEFREQ <= ioscT.bidx.msps && ioscT.bidx.msps <= MAXmSAMPLEFREQ)                                                     ||
+                            if(    !(1 <= ioscT.gain && ioscT.gain <= 4)                                                                               ||                                        
+                                        !(PWMLOWLIMIT <= (pwm = OSCPWM(((OSC *) rgInstr[ioscT.id]), ioscT.gain-1, ioscT.mvOffset)) && pwm <= PWMHIGHLIMIT)    ||
+                                        !(MINmSAMPLEFREQ <= ioscT.bidx.xsps && ioscT.bidx.xsps <= MAXmSAMPLEFREQ)                                                     ||
                                         !(2 <= ioscT.bidx.cBuff && ioscT.bidx.cBuff <= AINMAXBUFFSIZE  && (ioscT.bidx.cBuff % 2) == 0)  
                                     )
                             {
                                 // Error Code
-                                utoa(ValueOutOfRange, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(ValueOutOfRange, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
-                            else
+
+                            else if(IsOSCxIdle(iosc) && IsLogIdle())
                             { 
                                 // status code
-                                rgchOut[odata[0].cb] = '0';
+                                pchJSONRespBuff[odata[0].cb] = '0';
                                 odata[0].cb++;
 
                                 // put out the actual offset
-                                memcpy(&rgchOut[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
                                 odata[0].cb += sizeof(szActualVOffset)-1;
-                                itoa(OSCVinFromDadcGainOffset(((OSC *) rgInstr[ioscT.id]),  0, (ioscT.gain-1), ioscT.mvOffset), &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(OSCVinFromDadcGainOffset(((OSC *) rgInstr[ioscT.id]),  0, (ioscT.gain-1), ioscT.mvOffset), &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 CalculateBufferIndexes(&ioscT.bidx);
 
                                 // put out the actual Freq
-                                memcpy(&rgchOut[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
                                 odata[0].cb += sizeof(szActualSampleFreq)-1;
-                                ulltoa(ioscT.bidx.msps, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                ulltoa(ioscT.bidx.xsps, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // trigger delay
-                                memcpy(&rgchOut[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
                                 odata[0].cb += sizeof(szActualTriggerDelay)-1;
-                                odata[0].cb += strlen(illtoa(ioscT.bidx.psDelay, &rgchOut[odata[0].cb], 10));
+                                odata[0].cb += strlen(illtoa(ioscT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10));
                                     
                                 // say we are waiting to apply the scope
                                 ioscT.state.processing = Waiting;
+
+                                // just kill any logging setup.
+                                pjcmd.iALog1.state.processing = Idle;
+                                pjcmd.iALog2.state.processing = Idle;
 
                                 // copy it over into the actual data structure
                                 if (ioscT.id == OSC1_ID) memcpy(&pjcmd.ioscCh1, &ioscT, sizeof(ioscT));
                                 else memcpy(&pjcmd.ioscCh2, &ioscT, sizeof(ioscT));
                             }
 
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            // are we in a state we can't change the parameters
+                            else
+                            {
+                                // Error Code
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                            }
+
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
 
                             break;
@@ -3307,7 +4912,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         case JSPAROscRead:
 
                             // put out the command and status
-                            memcpy(&rgchOut[odata[0].cb], szReadStatusCode, sizeof(szReadStatusCode)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szReadStatusCode, sizeof(szReadStatusCode)-1); 
                             odata[0].cb += sizeof(szReadStatusCode)-1;
   
                             if(ioscT.state.processing == Triggered && ioscT.buffLock == LOCKAvailable)
@@ -3322,8 +4927,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 if(ioscT.acqCount > acqCountBuf)
                                 {
                                     // Error Code
-                                    utoa(AcqCountTooOld, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(AcqCountTooOld, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 }
 
                                 else
@@ -3332,25 +4937,26 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     ioscT.buffLock = LOCKOutput;
 
                                     // status code
-                                    rgchOut[odata[0].cb] = '0';
+                                    pchJSONRespBuff[odata[0].cb] = '0';
                                     odata[0].cb++;
 
                                     // binary offset
-                                    memcpy(&rgchOut[odata[0].cb], szBinaryOffset, sizeof(szBinaryOffset)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szBinaryOffset, sizeof(szBinaryOffset)-1); 
                                     odata[0].cb += sizeof(szBinaryOffset)-1;
-                                    utoa(iBinOffset, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(iBinOffset, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // fill in the binary location info
                                     odata[cOData].cb = ioscT.bidx.cBuff * sizeof(int16_t);
                                     odata[cOData].pbOut = (uint8_t *) ioscT.pBuff;
+                                    odata[cOData].ReadData = &OSPAR::ReadJSONResp;
 //                                    odata[cOData].pbOut = (uint8_t *) &ioscT.pBuff[ioscT.iStartRetBuf];
 
                                     // binary length 
-                                    memcpy(&rgchOut[odata[0].cb], szBinaryLength, sizeof(szBinaryLength)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szBinaryLength, sizeof(szBinaryLength)-1); 
                                     odata[0].cb += sizeof(szBinaryLength)-1;
-                                    utoa(odata[cOData].cb, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(odata[cOData].cb, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // update the offset for the next one
                                     ioscT.iBinOffset = iBinOffset;
@@ -3358,49 +4964,49 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
 
                                     // Put out the acqCount
                                     ioscT.acqCount = acqCountBuf;
-                                    memcpy(&rgchOut[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
                                     odata[0].cb += sizeof(szAcqCount)-1;
-                                    utoa(acqCountBuf, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(acqCountBuf, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // put out the sps Freq
-                                    memcpy(&rgchOut[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
                                     odata[0].cb += sizeof(szActualSampleFreq)-1;
-                                    ulltoa(ioscT.bidx.msps, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    ulltoa(ioscT.bidx.xsps, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // POI
-                                    memcpy(&rgchOut[odata[0].cb], szPointOfInterest, sizeof(szPointOfInterest)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szPointOfInterest, sizeof(szPointOfInterest)-1); 
                                     odata[0].cb += sizeof(szPointOfInterest)-1;
-                                    utoa(ioscT.bidx.iPOI, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(ioscT.bidx.iPOI, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // trigger index
-                                    memcpy(&rgchOut[odata[0].cb], szTriggerIndex, sizeof(szTriggerIndex)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szTriggerIndex, sizeof(szTriggerIndex)-1); 
                                     odata[0].cb += sizeof(szTriggerIndex)-1;
-                                    itoa(ioscT.bidx.iTrg, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    itoa(ioscT.bidx.iTrg, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // TBD: REMOVE trigger delay
-                                    memcpy(&rgchOut[odata[0].cb], szTriggerDelay, sizeof(szTriggerDelay)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szTriggerDelay, sizeof(szTriggerDelay)-1); 
                                     odata[0].cb += sizeof(szTriggerDelay)-1;
-                                    odata[0].cb += strlen(illtoa(ioscT.bidx.psDelay, &rgchOut[odata[0].cb], 10));
+                                    odata[0].cb += strlen(illtoa(ioscT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10));
 
                                     // trigger delay
-                                    memcpy(&rgchOut[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
                                     odata[0].cb += sizeof(szActualTriggerDelay)-1;
-                                    odata[0].cb += strlen(illtoa(ioscT.bidx.psDelay, &rgchOut[odata[0].cb], 10));
+                                    odata[0].cb += strlen(illtoa(ioscT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10));
                                     
                                     // Osc Offset
-                                    memcpy(&rgchOut[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
                                     odata[0].cb += sizeof(szActualVOffset)-1;
-                                    itoa(OSCVinFromDadcGainOffset(((OSC *) rgInstr[ioscT.id]),  0, (ioscT.gain-1), ioscT.mvOffset), &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    itoa(OSCVinFromDadcGainOffset(((OSC *) rgInstr[ioscT.id]),  0, (ioscT.gain-1), ioscT.mvOffset), &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // put in the gain
-                                    memcpy(&rgchOut[odata[0].cb], szActualGain, sizeof(szActualGain)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szActualGain, sizeof(szActualGain)-1); 
                                     odata[0].cb += sizeof(szActualGain)-1;
-                                    memcpy(&rgchOut[odata[0].cb], rgszGains[ioscT.gain], strlen(rgszGains[ioscT.gain])); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], rgszGains[ioscT.gain], strlen(rgszGains[ioscT.gain])); 
                                     odata[0].cb += strlen(rgszGains[ioscT.gain]);
                                 
                                     if (ioscT.id == OSC1_ID) 
@@ -3422,19 +5028,19 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             else if(ioscT.state.processing == Armed) 
                             {     
                                 // Error Code
-                                utoa(InstrumentArmed, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentArmed, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
                             
                             else
                             {
                                 // Error Code
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
 
                             // put out the wait time
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
 
                             break;
@@ -3442,7 +5048,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         case JSPAROscGetCurrentState:
 
                             // put out the command and status
-                            memcpy(&rgchOut[odata[0].cb], szGetCurrentStateStatusCode, sizeof(szGetCurrentStateStatusCode)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szGetCurrentStateStatusCode, sizeof(szGetCurrentStateStatusCode)-1); 
                             odata[0].cb += sizeof(szGetCurrentStateStatusCode)-1;
 
                             // refresh the data
@@ -3450,50 +5056,50 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             else memcpy(&ioscT, &pjcmd.ioscCh2, sizeof(ioscT));
 
                             // status code
-                            rgchOut[odata[0].cb++] = '0';
+                            pchJSONRespBuff[odata[0].cb++] = '0';
 
                             // Put out the acqCount
-                            memcpy(&rgchOut[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
                             odata[0].cb += sizeof(szAcqCount)-1;
-                            utoa(ioscT.acqCount, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            utoa(ioscT.acqCount, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // Osc Offset
-                            memcpy(&rgchOut[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualVOffset, sizeof(szActualVOffset)-1); 
                             odata[0].cb += sizeof(szActualVOffset)-1;
-                            itoa(OSCVinFromDadcGainOffset(((OSC *) rgInstr[ioscT.id]),  0, (ioscT.gain-1), ioscT.mvOffset), &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            itoa(OSCVinFromDadcGainOffset(((OSC *) rgInstr[ioscT.id]),  0, (ioscT.gain-1), ioscT.mvOffset), &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // put out the sps Freq
-                            memcpy(&rgchOut[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
                             odata[0].cb += sizeof(szActualSampleFreq)-1;
-                            ulltoa(ioscT.bidx.msps, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            ulltoa(ioscT.bidx.xsps, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // put in the gain
-                            memcpy(&rgchOut[odata[0].cb], szActualGain, sizeof(szActualGain)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualGain, sizeof(szActualGain)-1); 
                             odata[0].cb += sizeof(szActualGain)-1;
-                            memcpy(&rgchOut[odata[0].cb], rgszGains[ioscT.gain], strlen(rgszGains[ioscT.gain])); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], rgszGains[ioscT.gain], strlen(rgszGains[ioscT.gain])); 
                             odata[0].cb += strlen(rgszGains[ioscT.gain]);
 
                             // TBD: REMOVE trigger delay
-                            memcpy(&rgchOut[odata[0].cb], szTriggerDelay, sizeof(szTriggerDelay)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szTriggerDelay, sizeof(szTriggerDelay)-1); 
                             odata[0].cb += sizeof(szTriggerDelay)-1;
-                            odata[0].cb += strlen(illtoa(ioscT.bidx.psDelay, &rgchOut[odata[0].cb], 10));
+                            odata[0].cb += strlen(illtoa(ioscT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10));
 
                             // trigger delay
-                            memcpy(&rgchOut[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
                             odata[0].cb += sizeof(szActualTriggerDelay)-1;
-                            odata[0].cb += strlen(illtoa(ioscT.bidx.psDelay, &rgchOut[odata[0].cb], 10));
+                            odata[0].cb += strlen(illtoa(ioscT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10));
 
                             // buffer size
-                            memcpy(&rgchOut[odata[0].cb], szBufferSize, sizeof(szBufferSize)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szBufferSize, sizeof(szBufferSize)-1); 
                             odata[0].cb += sizeof(szBufferSize)-1;
-                            utoa(ioscT.bidx.cBuff, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            utoa(ioscT.bidx.cBuff, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 
                             // the current state 
-                            memcpy(&rgchOut[odata[0].cb], szState, sizeof(szState)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szState, sizeof(szState)-1); 
                             odata[0].cb += sizeof(szState)-1;
 
                             // put out the trigger state
@@ -3502,39 +5108,39 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 case Idle:
                                 case Waiting:
                                     // put out idle
-                                    strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Idle]); 
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Idle]); 
                                     break;
 
                                 case Triggered:
                                     // put out triggered
-                                    strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Triggered]); 
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Triggered]); 
                                     break;
 
                                 case Armed:
                                     if(T9CONbits.ON)
                                     {
                                         // put out acquiring
-                                        strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Acquiring]); 
+                                        strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Acquiring]); 
                                     }
 
                                     // otherwise we are armed or in the process of being armed
                                     else
                                     {
                                         // put out acquiring
-                                        strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Armed]); 
+                                        strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Armed]); 
                                     }
                                     break;
 
                                 // Say armed or acquiring when running
                                 default:
                                     // busy doing something esle
-                                    strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Busy]); 
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Busy]); 
                                     break;
                             }
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]); 
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]); 
 
                             // put out the wait time
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
                             break;
 
@@ -3550,7 +5156,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokEndArray) 
                 {
                     // put out end of array
-                    memcpy(&rgchOut[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
                     odata[0].cb += sizeof(szEndArray)-1;
 
                     // reload channel members
@@ -3572,7 +5178,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     memcpy(&ilaT, &pjcmd.ila, sizeof(ILA));
                     rgStrU32 = rgStrU32LaChannel;
                     cStrU32 = sizeof(rgStrU32LaChannel) / sizeof(STRU32);
-                    memcpy(&rgchOut[odata[0].cb], szLaObject, sizeof(szLaObject)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szLaObject, sizeof(szLaObject)-1); 
                     odata[0].cb += sizeof(szLaObject)-1;
                     state = OSPARMemberName;
                 }
@@ -3583,7 +5189,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 {
                     rgStrU32 = rgStrU32La;
                     cStrU32 = sizeof(rgStrU32La) / sizeof(STRU32);
-                    memcpy(&rgchOut[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
                     odata[0].cb += sizeof(szCh1Array)-1;        
                     stateEndArray = OSPARLaChArrayEnd;
                     stateEndObject = OSPARLaObjectEnd;
@@ -3606,7 +5212,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     ilaT.state.parsing = JSPARSetParm;
 
                     // put the SetParam command
-                    memcpy(&rgchOut[odata[0].cb], szSetParmStatusCode, sizeof(szSetParmStatusCode)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szSetParmStatusCode, sizeof(szSetParmStatusCode)-1); 
                     odata[0].cb += sizeof(szSetParmStatusCode)-1;
 
                     state = OSPARSkipValueSep;
@@ -3619,7 +5225,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     char szT[32];
                     memcpy(szT, szToken, cbToken);
                     szT[cbToken] = '\0';
-                    ilaT.bidx.msps = atoll(szT);
+                    ilaT.bidx.xsps = atoll(szT);
                     state = OSPARSkipValueSep;
                 }
                 break;
@@ -3672,7 +5278,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokStringValue)
                 {
                     // put out the command and status
-                    memcpy(&rgchOut[odata[0].cb], szReadStatusCode, sizeof(szReadStatusCode)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szReadStatusCode, sizeof(szReadStatusCode)-1); 
                     odata[0].cb += sizeof(szReadStatusCode)-1;
   
                     state = OSPARSkipValueSep;
@@ -3684,7 +5290,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokStringValue)
                 {
                     // put out the command and status
-                    memcpy(&rgchOut[odata[0].cb], szGetCurrentStateStatusCode, sizeof(szGetCurrentStateStatusCode)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szGetCurrentStateStatusCode, sizeof(szGetCurrentStateStatusCode)-1); 
                     odata[0].cb += sizeof(szGetCurrentStateStatusCode)-1;
 
                     state = OSPARSkipValueSep;
@@ -3696,7 +5302,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokStringValue)
                 {
                     // put the Run command
-                    memcpy(&rgchOut[odata[0].cb], szLaRun, sizeof(szLaRun)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szLaRun, sizeof(szLaRun)-1); 
                     odata[0].cb += sizeof(szLaRun)-1;
 
                     // get this out so we run the loop commands to stop all IO
@@ -3709,11 +5315,12 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 }
                 break;
 
+#ifdef LASTOP
             case OSPARLaStop:
                 if(jsonToken == tokStringValue)
                 {
                     // put Stop command
-                    memcpy(&rgchOut[odata[0].cb], szLaStop, sizeof(szLaStop)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szLaStop, sizeof(szLaStop)-1); 
                     odata[0].cb += sizeof(szLaStop)-1;
 
                     // say we want to run
@@ -3722,6 +5329,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     state = OSPARSkipValueSep;
                 }
                 break;
+#endif
 
             case OSPARLaObjectEnd:
                 if(jsonToken == tokEndObject)
@@ -3732,45 +5340,50 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     {
                         case JSPARSetParm:
 
-                            // are we in a state we can't change the parameters
-                            if(ilaT.buffLock != LOCKAvailable)
-                            {
-                                // Error Code
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
-                            }
-
                             // Do a check of parameter Ranging
-                            else if(ilaT.bidx.msps > LAMAXmSPS || !CalculateBufferIndexes(&ilaT.bidx))                                      
+                            if(ilaT.bidx.xsps > LAMAXmSPS || !CalculateBufferIndexes(&ilaT.bidx))                                      
                             {
                                 // Error Code
-                                utoa(ValueOutOfRange, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(ValueOutOfRange, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
-                            else
+                            else if(IsLAIdle() && IsAWGIdle() && IsLogIdle())
                             { 
                                 // status code
-                                rgchOut[odata[0].cb] = '0';
+                                pchJSONRespBuff[odata[0].cb] = '0';
                                 odata[0].cb++;
 
                                 // put out the actual Freq
-                                memcpy(&rgchOut[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
                                 odata[0].cb += sizeof(szActualSampleFreq)-1;
-                                ulltoa(ilaT.bidx.msps, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                ulltoa(ilaT.bidx.xsps, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // trigger delay
-                                memcpy(&rgchOut[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
                                 odata[0].cb += sizeof(szActualTriggerDelay)-1;
-                                odata[0].cb += strlen(illtoa(ilaT.bidx.psDelay, &rgchOut[odata[0].cb], 10));
+                                odata[0].cb += strlen(illtoa(ilaT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10));
 
                                 // say we are waiting to apply the scope
                                 ilaT.state.processing = Waiting;
 
+                                // kill all competing instruments
+                                pjcmd.iawg.state.processing     = Idle;
+                                pjcmd.iALog1.state.processing   = Idle;
+                                pjcmd.iALog2.state.processing   = Idle;
+
                                 memcpy(&pjcmd.ila, &ilaT, sizeof(ilaT));
                             }
 
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            // are we in a state we can't change the parameters
+                            else
+                            {
+                                // Error Code
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                            }
+
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
 
                             break;
@@ -3788,8 +5401,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 if(ilaT.acqCount > acqCountBuf)
                                 {
                                     // Error Code
-                                    utoa(AcqCountTooOld, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(AcqCountTooOld, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 }
 
                                 else
@@ -3798,25 +5411,26 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     ilaT.buffLock = LOCKOutput;
 
                                     // status code
-                                    rgchOut[odata[0].cb] = '0';
+                                    pchJSONRespBuff[odata[0].cb] = '0';
                                     odata[0].cb++;
 
                                     // binary offset
-                                    memcpy(&rgchOut[odata[0].cb], szBinaryOffset, sizeof(szBinaryOffset)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szBinaryOffset, sizeof(szBinaryOffset)-1); 
                                     odata[0].cb += sizeof(szBinaryOffset)-1;
-                                    utoa(iBinOffset, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(iBinOffset, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // fill in the binary location info
                                     odata[cOData].cb = ilaT.bidx.cBuff * sizeof(int16_t);
                                     odata[cOData].pbOut = (uint8_t *) ilaT.pBuff;
+                                    odata[cOData].ReadData = &OSPAR::ReadJSONResp;
 //                                    odata[cOData].pbOut = (uint8_t *) &ilaT.pBuff[ilaT.iStartRetBuf];
 
                                     // binary length 
-                                    memcpy(&rgchOut[odata[0].cb], szBinaryLength, sizeof(szBinaryLength)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szBinaryLength, sizeof(szBinaryLength)-1); 
                                     odata[0].cb += sizeof(szBinaryLength)-1;
-                                    utoa(odata[cOData].cb, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(odata[cOData].cb, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // update the offset for the next one
                                     ilaT.iBinOffset = iBinOffset;
@@ -3824,44 +5438,44 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
 
                                     // Put out the acqCount
                                     ilaT.acqCount = acqCountBuf;
-                                    memcpy(&rgchOut[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
                                     odata[0].cb += sizeof(szAcqCount)-1;
-                                    utoa(acqCountBuf, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(acqCountBuf, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // Put out the bitmask
-                                    memcpy(&rgchOut[odata[0].cb], szBitMask, sizeof(szBitMask)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szBitMask, sizeof(szBitMask)-1); 
                                     odata[0].cb += sizeof(szBitMask)-1;
-                                    utoa(ilaT.bitMask, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(ilaT.bitMask, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // put out the sps Freq
-                                    memcpy(&rgchOut[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
                                     odata[0].cb += sizeof(szActualSampleFreq)-1;
-                                    ulltoa(ilaT.bidx.msps, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    ulltoa(ilaT.bidx.xsps, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // POI
-                                    memcpy(&rgchOut[odata[0].cb], szPointOfInterest, sizeof(szPointOfInterest)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szPointOfInterest, sizeof(szPointOfInterest)-1); 
                                     odata[0].cb += sizeof(szPointOfInterest)-1;
-                                    utoa(ilaT.bidx.iPOI, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    utoa(ilaT.bidx.iPOI, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // trigger index
-                                    memcpy(&rgchOut[odata[0].cb], szTriggerIndex, sizeof(szTriggerIndex)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szTriggerIndex, sizeof(szTriggerIndex)-1); 
                                     odata[0].cb += sizeof(szTriggerIndex)-1;
-                                    itoa(ilaT.bidx.iTrg, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    itoa(ilaT.bidx.iTrg, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                     // TBD: REMOVE trigger delay
-                                    memcpy(&rgchOut[odata[0].cb], szTriggerDelay, sizeof(szTriggerDelay)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szTriggerDelay, sizeof(szTriggerDelay)-1); 
                                     odata[0].cb += sizeof(szTriggerDelay)-1;
-                                    odata[0].cb += strlen(illtoa(ilaT.bidx.psDelay, &rgchOut[odata[0].cb], 10));
+                                    odata[0].cb += strlen(illtoa(ilaT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10));
 
                                     // trigger delay
-                                    memcpy(&rgchOut[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
                                     odata[0].cb += sizeof(szActualTriggerDelay)-1;
-                                    odata[0].cb += strlen(illtoa(ilaT.bidx.psDelay, &rgchOut[odata[0].cb], 10));
+                                    odata[0].cb += strlen(illtoa(ilaT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10));
 
                                     memcpy(&pjcmd.ila, &ilaT, sizeof(ilaT));
                                     odata[cOData].pLockState = &pjcmd.ila.buffLock;
@@ -3874,19 +5488,19 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             else if(ilaT.state.processing == Armed) 
                             {     
                                 // Error Code
-                                utoa(InstrumentArmed, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentArmed, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
                             
                             else
                             {
                                 // Error Code
-                                utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                             }
 
                             // put out the wait time
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
 
                             break;
@@ -3897,44 +5511,44 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             memcpy(&ilaT, &pjcmd.ila, sizeof(ilaT));
 
                             // status code
-                            rgchOut[odata[0].cb++] = '0';
+                            pchJSONRespBuff[odata[0].cb++] = '0';
 
                             // Put out the acqCount
-                            memcpy(&rgchOut[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
                             odata[0].cb += sizeof(szAcqCount)-1;
-                            utoa(ilaT.acqCount, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            utoa(ilaT.acqCount, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // Put out the bitmask
-                            memcpy(&rgchOut[odata[0].cb], szBitMask, sizeof(szBitMask)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szBitMask, sizeof(szBitMask)-1); 
                             odata[0].cb += sizeof(szBitMask)-1;
-                            utoa(ilaT.bitMask, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            utoa(ilaT.bitMask, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // put out the sps Freq
-                            memcpy(&rgchOut[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualSampleFreq, sizeof(szActualSampleFreq)-1); 
                             odata[0].cb += sizeof(szActualSampleFreq)-1;
-                            ulltoa(ilaT.bidx.msps, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            ulltoa(ilaT.bidx.xsps, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // TBD: REMOVE trigger delay
-                            memcpy(&rgchOut[odata[0].cb], szTriggerDelay, sizeof(szTriggerDelay)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szTriggerDelay, sizeof(szTriggerDelay)-1); 
                             odata[0].cb += sizeof(szTriggerDelay)-1;
-                            odata[0].cb += strlen(illtoa(ilaT.bidx.psDelay, &rgchOut[odata[0].cb], 10));
+                            odata[0].cb += strlen(illtoa(ilaT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10));
 
                             // trigger delay
-                            memcpy(&rgchOut[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szActualTriggerDelay, sizeof(szActualTriggerDelay)-1); 
                             odata[0].cb += sizeof(szActualTriggerDelay)-1;
-                            odata[0].cb += strlen(illtoa(ilaT.bidx.psDelay, &rgchOut[odata[0].cb], 10));
+                            odata[0].cb += strlen(illtoa(ilaT.bidx.psDelay, &pchJSONRespBuff[odata[0].cb], 10));
 
                             // buffer size
-                            memcpy(&rgchOut[odata[0].cb], szBufferSize, sizeof(szBufferSize)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szBufferSize, sizeof(szBufferSize)-1); 
                             odata[0].cb += sizeof(szBufferSize)-1;
-                            utoa(ilaT.bidx.cBuff, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            utoa(ilaT.bidx.cBuff, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 
                             // the current state 
-                            memcpy(&rgchOut[odata[0].cb], szState, sizeof(szState)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szState, sizeof(szState)-1); 
                             odata[0].cb += sizeof(szState)-1;
 
                             // put out the trigger state
@@ -3943,38 +5557,38 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 case Idle:
                                 case Waiting:
                                     // put out idle
-                                    strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Idle]); 
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Idle]); 
                                     break;
 
                                 case Triggered:
                                     // put out triggered
-                                    strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Triggered]); 
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Triggered]); 
                                     break;
 
                                 case Armed:
                                     if(T9CONbits.ON)
                                     {
                                         // put out acquiring
-                                        strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Acquiring]); 
+                                        strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Acquiring]); 
                                     }
 
                                     // otherwise we are armed or in the process of being armed
                                     else
                                     {
                                         // put out armed
-                                        strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Armed]); 
+                                        strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Armed]); 
                                     }
                                     break;
 
                                 // busy doing something esle
                                 default:
-                                    strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Busy]); 
+                                    strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Busy]); 
                                     break;
                             }
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]); 
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]); 
 
                             // put out the wait time
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
                             break;
 
@@ -3997,20 +5611,21 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             la.pTMR->TxCON.ON            = 1;                    // turn the timer on
 
                             // put out the wait time
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
                             break;
-
+#ifdef LASTOP
                         case JSPARLaStop:
 
                             // cue up the stop
                             pjcmd.ila.state.processing = JSPARLaStop;
 
                             // put out the wait time
-                            memcpy(&rgchOut[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
                             odata[0].cb += sizeof(szWaitUntil)-1;
 
                             break;
+#endif
 
                         default:
                             ASSERT(NEVER_SHOULD_GET_HERE);
@@ -4027,7 +5642,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokEndArray) 
                 {
                     // put out end of array
-                    memcpy(&rgchOut[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
                     odata[0].cb += sizeof(szEndArray)-1;
 
                     // reload channel members
@@ -4050,7 +5665,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     triggerT.state.processing = Idle;
                     rgStrU32 = rgStrU32TrgChannel;
                     cStrU32 = sizeof(rgStrU32TrgChannel) / sizeof(STRU32);
-                    memcpy(&rgchOut[odata[0].cb], szTrgObject, sizeof(szTrgObject)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szTrgObject, sizeof(szTrgObject)-1); 
                     odata[0].cb += sizeof(szTrgObject)-1;
                     state = OSPARMemberName;
                 }
@@ -4061,7 +5676,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 {
                     rgStrU32 = rgStrU32Trg;
                     cStrU32 = sizeof(rgStrU32Trg) / sizeof(STRU32);
-                    memcpy(&rgchOut[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szCh1Array, sizeof(szCh1Array)-1); 
                     odata[0].cb += sizeof(szCh1Array)-1;        
                     stateEndArray = OSPARTrgChArrayEnd;
                     stateEndObject = OSPARErrObjectEnd;
@@ -4191,7 +5806,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         triggerT.idTrigSrc = OSC2_ID;
                     }
 
-                    // opps, specifying channel 2 on an instrument with now channel 2
+                    // opps, specifying channel 2 on an instrument with no channel 2
                     else if(triggerT.fUseCh2)
                     {
                         triggerT.state.processing = InvalidChannel;
@@ -4320,19 +5935,27 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     uint32_t i;
 
                     // put our the status code (but not the code itself)
-                    memcpy(&rgchOut[odata[0].cb], szSetParmStatusCode, sizeof(szSetParmStatusCode)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szSetParmStatusCode, sizeof(szSetParmStatusCode)-1); 
                     odata[0].cb += sizeof(szSetParmStatusCode)-1;
 
-                    // do some error checking
-                    if((triggerT.idTrigSrc == OSC1_ID || triggerT.idTrigSrc == OSC2_ID) && !(triggerT.triggerType == TRGTPRising || triggerT.triggerType == TRGTPFalling))
+                    // error during parsing, invalid channel error; we use the temp processing state as an error indicator, that may not be the state of the actual trigger
+                    if(triggerT.state.processing != Idle)
                     {
                         // Put out the error status
-                        utoa(ValueOutOfRange, &rgchOut[odata[0].cb], 10);
-                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                        utoa(triggerT.state.processing, &pchJSONRespBuff[odata[0].cb], 10);
+                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                    }
+
+                    // do some error checking
+                    else if((triggerT.idTrigSrc == OSC1_ID || triggerT.idTrigSrc == OSC2_ID) && !(triggerT.triggerType == TRGTPRising || triggerT.triggerType == TRGTPFalling))
+                    {
+                        // Put out the error status
+                        utoa(ValueOutOfRange, &pchJSONRespBuff[odata[0].cb], 10);
+                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                     }
 
                     // see if the trigger can be assigned
-                    else if(triggerT.state.processing == Idle && (pjcmd.trigger.state.processing == Idle || pjcmd.trigger.state.processing == Triggered))
+                    else if(IsTrgIdle())
                     {
 
                         // make sure our src instrument gets run by either being a target, or one past the targets in the run
@@ -4348,7 +5971,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     triggerT.rgtte[triggerT.cTargets].pLockState = &pjcmd.ioscCh1.buffLock;
 
                                     // we must set up some sort of parameters to run
-                                    pjcmd.ioscCh1.bidx.msps     = MAXmSAMPLEFREQ;
+                                    pjcmd.ioscCh1.bidx.xsps     = MAXmSAMPLEFREQ;
                                     pjcmd.ioscCh1.bidx.psDelay  = 0;        
                                     pjcmd.ioscCh1.bidx.cBuff    = AINOVERSIZE;         
                                     CalculateBufferIndexes(&pjcmd.ioscCh1.bidx);
@@ -4359,7 +5982,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     triggerT.rgtte[triggerT.cTargets].pLockState = &pjcmd.ioscCh2.buffLock;
 
                                     // we must set up some sort of parameters to run
-                                    pjcmd.ioscCh2.bidx.msps     = MAXmSAMPLEFREQ;
+                                    pjcmd.ioscCh2.bidx.xsps     = MAXmSAMPLEFREQ;
                                     pjcmd.ioscCh2.bidx.psDelay  = 0;        
                                     pjcmd.ioscCh2.bidx.cBuff    = AINOVERSIZE;         
                                     CalculateBufferIndexes(&pjcmd.ioscCh2.bidx);
@@ -4370,7 +5993,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                     triggerT.rgtte[triggerT.cTargets].pLockState = &pjcmd.ila.buffLock;
 
                                     // we must set up some sort of parameters to run
-                                    pjcmd.ila.bidx.msps     = LAMAXmSPS;
+                                    pjcmd.ila.bidx.xsps     = LAMAXmSPS;
                                     pjcmd.ila.bidx.psDelay  = 0;        
                                     pjcmd.ila.bidx.cBuff    = LAOVERSIZE;         
                                     CalculateBufferIndexes(&pjcmd.ila.bidx);
@@ -4386,33 +6009,29 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             triggerT.cRun++;
                         }
 
+                        // we are ready to single/run
+                        triggerT.state.processing = Waiting;
+
                         // move temp to real
                         // this will put the trigger state back to Idle
                         memcpy(&pjcmd.trigger, &triggerT, sizeof(pjcmd.trigger));
                         memset(&triggerT, 0, sizeof(pjcmd.trigger));
 
                         // status is 0, it worked.
-                        rgchOut[odata[0].cb++] = '0';
-                    }
+                        pchJSONRespBuff[odata[0].cb++] = '0';
 
-                    // error during parsing
-                    else if(triggerT.state.processing != Idle)
-                    {
-                        // Put out the error status
-                        utoa(triggerT.state.processing, &rgchOut[odata[0].cb], 10);
-                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
                     }
 
                     // can't update the trigger right now
                     else
                     {
                         // Put out the error status
-                        utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                        utoa(InstrumentInUse, &pchJSONRespBuff[odata[0].cb], 10);
+                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                     }
           
                     // put out the wait
-                    memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                     odata[0].cb += sizeof(szWait0)-1;
 
                     stateEndObject = OSPARErrObjectEnd;
@@ -4434,15 +6053,15 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokEndObject)
                 {
                     // put out the command and status
-                    memcpy(&rgchOut[odata[0].cb], szTrgRunStatus, sizeof(szTrgRunStatus)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szTrgRunStatus, sizeof(szTrgRunStatus)-1); 
                     odata[0].cb += sizeof(szTrgRunStatus)-1;
 
                     // Put out the error status
-                    utoa(Unimplemented, &rgchOut[odata[0].cb], 10);
-                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                    utoa(Unimplemented, &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                         
                     // put out the wait
-                    memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
 
                     stateEndObject = OSPARErrObjectEnd;
                     stateEndArray = OSPARTrgChArrayEnd;
@@ -4464,20 +6083,20 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokEndObject)
                 {
                     // put out the command and status
-                    memcpy(&rgchOut[odata[0].cb], szTrgGetCurrentStateStatus, sizeof(szTrgGetCurrentStateStatus)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szTrgGetCurrentStateStatus, sizeof(szTrgGetCurrentStateStatus)-1); 
                     odata[0].cb += sizeof(szTrgGetCurrentStateStatus)-1;
 
                     // put out the status code
-                    rgchOut[odata[0].cb++] = '0';
+                    pchJSONRespBuff[odata[0].cb++] = '0';
 
                     // Put out the acqCount
-                    memcpy(&rgchOut[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
                     odata[0].cb += sizeof(szAcqCount)-1;
-                    utoa(pjcmd.trigger.acqCount, &rgchOut[odata[0].cb], 10);
-                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                    utoa(pjcmd.trigger.acqCount, &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                     // put out the state
-                    memcpy(&rgchOut[odata[0].cb], szState, sizeof(szState)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szState, sizeof(szState)-1); 
                     odata[0].cb += sizeof(szState)-1;
 
                     // put out the trigger state
@@ -4486,12 +6105,12 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         case Idle:
                         case Stopped:
                             // put out idle
-                            strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Idle]); 
+                            strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Idle]); 
                             break;
 
                         case Triggered:
                             // put out triggered
-                            strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Triggered]); 
+                            strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Triggered]); 
                             break;
 
                         case Run:
@@ -4499,33 +6118,33 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             if(T9CONbits.ON)
                             {
                                 // put out acquiring
-                                strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Acquiring]); 
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Acquiring]); 
                             }
 
                             // otherwise we are armed or in the process of being armed
                             else
                             {
                                 // put out armed
-                                strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Armed]); 
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Armed]); 
                             }
                             break;
 
                         // busy doing something else
                         default:
-                            strcpy(&rgchOut[odata[0].cb], rgInstrumentStates[Busy]); 
+                            strcpy(&pchJSONRespBuff[odata[0].cb], rgInstrumentStates[Busy]); 
                             break;
                     }
-                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                     // put out the source, if we have one
                     if(pjcmd.trigger.idTrigSrc != NULL_ID)
                     {
                         // put out the source
-                        memcpy(&rgchOut[odata[0].cb], szTrgSource, sizeof(szTrgSource)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szTrgSource, sizeof(szTrgSource)-1); 
                         odata[0].cb += sizeof(szTrgSource)-1;
 
                         // put out the instrument
-                        memcpy(&rgchOut[odata[0].cb], szInstrument, sizeof(szInstrument)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szInstrument, sizeof(szInstrument)-1); 
                         odata[0].cb += sizeof(szInstrument)-1;
 
                         // put out source instrument
@@ -4535,62 +6154,62 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             case OSC2_ID:
 
                                 // put out the instrument
-                                memcpy(&rgchOut[odata[0].cb], szOsc, sizeof(szOsc)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szOsc, sizeof(szOsc)-1); 
                                 odata[0].cb += sizeof(szOsc)-1;
 
                                 // put out the channel
-                                memcpy(&rgchOut[odata[0].cb], szChannel, sizeof(szChannel)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szChannel, sizeof(szChannel)-1); 
                                 odata[0].cb += sizeof(szChannel)-1;
-                                if(pjcmd.trigger.idTrigSrc == OSC2_ID) rgchOut[odata[0].cb++] = '2';
-                                else rgchOut[odata[0].cb++] = '1';
+                                if(pjcmd.trigger.idTrigSrc == OSC2_ID) pchJSONRespBuff[odata[0].cb++] = '2';
+                                else pchJSONRespBuff[odata[0].cb++] = '1';
 
                                 // put out the Threashold type
-                                memcpy(&rgchOut[odata[0].cb], szType, sizeof(szType)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szType, sizeof(szType)-1); 
                                 odata[0].cb += sizeof(szType)-1;
-                                strcpy(&rgchOut[odata[0].cb], rgThresholdType[pjcmd.trigger.triggerType]); 
+                                strcpy(&pchJSONRespBuff[odata[0].cb], rgThresholdType[pjcmd.trigger.triggerType]); 
                                 odata[0].cb += strlen(rgThresholdType[pjcmd.trigger.triggerType]);
 
                                 // put out lower threshold
-                                memcpy(&rgchOut[odata[0].cb], szLowerThreshold, sizeof(szLowerThreshold)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szLowerThreshold, sizeof(szLowerThreshold)-1); 
                                 odata[0].cb += sizeof(szLowerThreshold)-1;
-                                itoa(pjcmd.trigger.mvLower, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(pjcmd.trigger.mvLower, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // put out upper threshold
-                                memcpy(&rgchOut[odata[0].cb], szUpperThreshold, sizeof(szUpperThreshold)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szUpperThreshold, sizeof(szUpperThreshold)-1); 
                                 odata[0].cb += sizeof(szUpperThreshold)-1;
-                                itoa(pjcmd.trigger.mvHigher, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(pjcmd.trigger.mvHigher, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 break;
 
                             case LOGIC1_ID:
 
                                 // put out the instrument
-                                memcpy(&rgchOut[odata[0].cb], szLa, sizeof(szLa)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szLa, sizeof(szLa)-1); 
                                 odata[0].cb += sizeof(szLa)-1;
 
                                 // put out the channel
-                                memcpy(&rgchOut[odata[0].cb], szChannel, sizeof(szChannel)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szChannel, sizeof(szChannel)-1); 
                                 odata[0].cb += sizeof(szChannel)-1;
-                                rgchOut[odata[0].cb++] = '1';
+                                pchJSONRespBuff[odata[0].cb++] = '1';
 
                                 // put out Rising Edge mask
-                                memcpy(&rgchOut[odata[0].cb], szRisingEdge, sizeof(szRisingEdge)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szRisingEdge, sizeof(szRisingEdge)-1); 
                                 odata[0].cb += sizeof(szRisingEdge)-1;
-                                itoa(pjcmd.trigger.posEdge, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(pjcmd.trigger.posEdge, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                                 // put out Falling Edge mask
-                                memcpy(&rgchOut[odata[0].cb], szFallingEdge, sizeof(szFallingEdge)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szFallingEdge, sizeof(szFallingEdge)-1); 
                                 odata[0].cb += sizeof(szFallingEdge)-1;
-                                itoa(pjcmd.trigger.negEdge, &rgchOut[odata[0].cb], 10);
-                                odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                itoa(pjcmd.trigger.negEdge, &pchJSONRespBuff[odata[0].cb], 10);
+                                odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 break;
 
                             case FORCE_TRG_ID:
 
                                 // put out the instrument
-                                memcpy(&rgchOut[odata[0].cb], szForce, sizeof(szForce)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szForce, sizeof(szForce)-1); 
                                 odata[0].cb += sizeof(szForce)-1;
                                 break;
 
@@ -4601,7 +6220,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         }
 
                         // end of source
-                        rgchOut[odata[0].cb++] = '}';
+                        pchJSONRespBuff[odata[0].cb++] = '}';
                     }
 
                     // put out the target, if we have one
@@ -4611,7 +6230,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         uint32_t i;
 
                         // put out the Targets
-                        memcpy(&rgchOut[odata[0].cb], szTrgTargets, sizeof(szTrgTargets)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szTrgTargets, sizeof(szTrgTargets)-1); 
                         odata[0].cb += sizeof(szTrgTargets)-1;
 
                         for(i=0; i<pjcmd.trigger.cTargets; i++)
@@ -4639,49 +6258,49 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                         if((bitTargets & 0x3) != 0)
                         {
                             // put out the OSC
-                            memcpy(&rgchOut[odata[0].cb], szOsc, sizeof(szOsc)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szOsc, sizeof(szOsc)-1); 
                             odata[0].cb += sizeof(szOsc)-1;
-                            memcpy(&rgchOut[odata[0].cb], szStartChArray, sizeof(szStartChArray)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szStartChArray, sizeof(szStartChArray)-1); 
                             odata[0].cb += sizeof(szStartChArray)-1;
 
                             if((bitTargets & 0x1) != 0)
                             {
-                                rgchOut[odata[0].cb++] = '1';
-                                rgchOut[odata[0].cb++] = ',';
+                                pchJSONRespBuff[odata[0].cb++] = '1';
+                                pchJSONRespBuff[odata[0].cb++] = ',';
                             }
 
                             if((bitTargets & 0x2) != 0)
                             {
-                                rgchOut[odata[0].cb++] = '2';
-                                rgchOut[odata[0].cb++] = ',';
+                                pchJSONRespBuff[odata[0].cb++] = '2';
+                                pchJSONRespBuff[odata[0].cb++] = ',';
                             }
 
                             odata[0].cb--;
-                            rgchOut[odata[0].cb++] = ']';
+                            pchJSONRespBuff[odata[0].cb++] = ']';
 
-                            if((bitTargets & 0x10) != 0) rgchOut[odata[0].cb++] = ',';
+                            if((bitTargets & 0x10) != 0) pchJSONRespBuff[odata[0].cb++] = ',';
                         }
 
                         // if there is an LA as a target
                         if((bitTargets & 0x10) != 0)
                         {
                             // put out the LA
-                            memcpy(&rgchOut[odata[0].cb], szLa, sizeof(szLa)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szLa, sizeof(szLa)-1); 
                             odata[0].cb += sizeof(szLa)-1;
-                            memcpy(&rgchOut[odata[0].cb], szStartChArray, sizeof(szStartChArray)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szStartChArray, sizeof(szStartChArray)-1); 
                             odata[0].cb += sizeof(szStartChArray)-1;
 
-                            rgchOut[odata[0].cb++] = '1';
-                            rgchOut[odata[0].cb++] = ']';
+                            pchJSONRespBuff[odata[0].cb++] = '1';
+                            pchJSONRespBuff[odata[0].cb++] = ']';
                         }
 
                         // end of targets
-                        rgchOut[odata[0].cb++] = '}';
+                        pchJSONRespBuff[odata[0].cb++] = '}';
                     }
 
 
                 // put out the wait 0
-                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                 odata[0].cb += sizeof(szWait0)-1;  
 
                 stateEndObject = OSPARErrObjectEnd;
@@ -4702,66 +6321,92 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARTrgChSingleObjectEnd:
                 if(jsonToken == tokEndObject)
                 {
-                    bool fLANeeded  = false;
-                    uint32_t i      = 0;
+                    char const *        szWait = szWait0;
+                    int32_t             cbWait = sizeof(szWait0) - 1;
+                    bool fConfigured    = (pjcmd.trigger.state.processing == Triggered);
+                    bool fReady         = (fConfigured || pjcmd.trigger.state.processing == Waiting);
+                    bool fLANeeded      = false;
+                    uint32_t i          = 0;
 
                     // put out the command and status
-                    memcpy(&rgchOut[odata[0].cb], szTrgSingleStatus, sizeof(szTrgSingleStatus)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szTrgSingleStatus, sizeof(szTrgSingleStatus)-1); 
                     odata[0].cb += sizeof(szTrgSingleStatus)-1;
 
-                    if(pjcmd.trigger.idTrigSrc == LOGIC1_ID) fLANeeded = true;
-                    for(i=0; i<pjcmd.trigger.cTargets; i++) if(pjcmd.trigger.rgtte[i].instrID == LOGIC1_ID) fLANeeded = true;
-                    
-                    if( IsTrgIdle() && (!fLANeeded || IsAWGIdle()) &&
-                        (pjcmd.trigger.state.parsing == JSPARSetParm)      
-                        )
+                    for(i=0; i<pjcmd.trigger.cRun; i++)
                     {
-                        pjcmd.trigger.state.processing = Queued;
+                        bool fConfig     = (pjcmd.trigger.rgtte[i].pstate->processing == Triggered);
+                        fConfigured     &= fConfig;
+                        fReady          &= (fConfig || pjcmd.trigger.rgtte[i].pstate->processing == Waiting);
+                        fLANeeded       |= (pjcmd.trigger.rgtte[i].instrID == LOGIC1_ID);
+                    }
 
-                        // make sure the AWG doesn't try to run
-                        if(fLANeeded) LockLA();
+                    if(fReady)
+                    {
 
-                        // put out the no error status
-                        rgchOut[odata[0].cb++] = '0';
+                        // set up the trigger
+                        if(fConfigured || TRGSetUp())
+                        {
+                            // keep the instruments static while we run, put everyone in the Armed state
+                            for(i=0; i<pjcmd.trigger.cRun; i++)
+                            {
+                                    pjcmd.trigger.rgtte[i].fWorking = true;
+                                    pjcmd.trigger.rgtte[i].pstate->processing = Armed;
+                                    *pjcmd.trigger.rgtte[i].pLockState = LOCKAcq; 
+                            }
 
-                        // up our acq count
-                        pjcmd.trigger.acqCount++;
+                            // make sure the AWG doesn't try to run
+                            if(fLANeeded) LockLA();
 
-                        // Put out the acqCount
-                        memcpy(&rgchOut[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
-                        odata[0].cb += sizeof(szAcqCount)-1;
-                        utoa(pjcmd.trigger.acqCount, &rgchOut[odata[0].cb], 10);
-                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                           // say we want to run the trigger
+                            pjcmd.trigger.state.processing = Run;
 
-                        // put out the wait
-                        memcpy(&rgchOut[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
-                        odata[0].cb += sizeof(szWaitUntil)-1;
+                            // put out the no error status
+                            pchJSONRespBuff[odata[0].cb++] = '0';
+
+                            // up our acq count
+                            pjcmd.trigger.acqCount++;
+
+                            // Put out the acqCount
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szAcqCount, sizeof(szAcqCount)-1); 
+                            odata[0].cb += sizeof(szAcqCount)-1;
+                            utoa(pjcmd.trigger.acqCount, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+
+                            // set wait until
+                            szWait = szWaitUntil;
+                            cbWait = sizeof(szWaitUntil)-1;
+                        }
+
+                        else
+                        {
+                            ASSERT(NEVER_SHOULD_GET_HERE);                     
+
+                        }
                     }
                     else
                     {
                         // Put out the error status
-                        utoa(InstrumentInUse, &rgchOut[odata[0].cb], 10);
-                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
-                        
-                        // put out the wait
-                        memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
-                        odata[0].cb += sizeof(szWait0)-1;
-                   }
+                        utoa(InstrumentNotConfigured, &pchJSONRespBuff[odata[0].cb], 10);
+                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                    }
 
-                stateEndObject = OSPARErrObjectEnd;
-                stateEndArray = OSPARTrgChArrayEnd;
-                stateValueSep = OSPARSeparatedObject;
-                state = OSPARSkipValueSep;
+                    // put out the wait time.
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szWait, cbWait); 
+                    odata[0].cb += cbWait;
+
+                    stateEndObject = OSPARErrObjectEnd;
+                    stateEndArray = OSPARTrgChArrayEnd;
+                    stateValueSep = OSPARSeparatedObject;
+                    state = OSPARSkipValueSep;
                 }
                 break;
-
-                
+               
             case OSPARTrgStop:
                 if(jsonToken == tokStringValue)
                 {                   
                     // we can always stop, never an error on that
                     // put out the stop command
-                    memcpy(&rgchOut[odata[0].cb], szTrgStop, sizeof(szTrgStop)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szTrgStop, sizeof(szTrgStop)-1); 
                     odata[0].cb += sizeof(szTrgStop)-1;
                     
                     stateEndObject = OSPARTrgChStopObjectEnd;
@@ -4775,8 +6420,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     uint32_t i = 0;
 
                     // if it is actuall running, then turn it off
-                    if( pjcmd.trigger.state.processing == Queued    ||
-                        pjcmd.trigger.state.processing == Run       ||
+                    if( pjcmd.trigger.state.processing == Run       ||
                         pjcmd.trigger.state.processing == Armed     )
                     {
 
@@ -4815,8 +6459,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                             }
                         }
 
-                        // put the trigger back to an idle state
-                        pjcmd.trigger.state.processing = Idle;
+                        // put the trigger back waiting state as we did set the parameters
+                        pjcmd.trigger.state.processing = Waiting;
                         pjcmd.trigger.state.parsing = JSPARSetParm;  // we did set the parameters already
                     }
 
@@ -4832,7 +6476,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 {                   
                     // we can always stop, never an error on that
                     // put out the stop command
-                    memcpy(&rgchOut[odata[0].cb], szTrgForceTrigger, sizeof(szTrgForceTrigger)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szTrgForceTrigger, sizeof(szTrgForceTrigger)-1); 
                     odata[0].cb += sizeof(szTrgForceTrigger)-1;
                     
                     stateEndObject = OSPARTrgChForceTriggerEnd;
@@ -4847,10 +6491,10 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     if(TRGForce())
                     {
                         // put out the status code
-                        rgchOut[odata[0].cb++] = '0';
+                        pchJSONRespBuff[odata[0].cb++] = '0';
 
                         // put out the wait until it is done
-                        memcpy(&rgchOut[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
+                        memcpy(&pchJSONRespBuff[odata[0].cb], szWaitUntil, sizeof(szWaitUntil)-1); 
                         odata[0].cb += sizeof(szWaitUntil)-1;
                     }
 
@@ -4858,21 +6502,21 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     else if(pjcmd.trigger.state.processing == Queued || pjcmd.trigger.state.processing == Run)
                     {
                             // Put out the error status
-                            utoa(InstrumentNotArmedYet, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            utoa(InstrumentNotArmedYet, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // put out the wait0
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
                     }
                     else
                     {
                             // Put out the error status
-                            utoa(InstrumentNotArmed, &rgchOut[odata[0].cb], 10);
-                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                            utoa(InstrumentNotArmed, &pchJSONRespBuff[odata[0].cb], 10);
+                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                             // put out the wait0
-                            memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                            memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                             odata[0].cb += sizeof(szWait0)-1;
                     }
                        
@@ -4887,7 +6531,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokEndArray) 
                 {
                     // put out end of array
-                    memcpy(&rgchOut[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
                     odata[0].cb += sizeof(szEndArray)-1;
 
                     // reload channel members
@@ -4909,7 +6553,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                     pjcmd.igpio.iPin = 0;
                     rgStrU32 = rgStrU32GpioChannel;
                     cStrU32 = sizeof(rgStrU32GpioChannel) / sizeof(STRU32);
-                    memcpy(&rgchOut[odata[0].cb], szGpioObject, sizeof(szGpioObject)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szGpioObject, sizeof(szGpioObject)-1); 
                     odata[0].cb += sizeof(szGpioObject)-1;
                     state = OSPARMemberName;
                 }
@@ -4937,13 +6581,13 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokArray)
                 {
                     // put the channel number out
-                    rgchOut[odata[0].cb++] = '"';
-                    itoa((pjcmd.igpio.iPin+1), &rgchOut[odata[0].cb], 10);
-                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
-                    rgchOut[odata[0].cb++] = '"';
+                    pchJSONRespBuff[odata[0].cb++] = '"';
+                    itoa((pjcmd.igpio.iPin+1), &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                    pchJSONRespBuff[odata[0].cb++] = '"';
 
                     // the rest of the channel array
-                    memcpy(&rgchOut[odata[0].cb], szStartChArray, sizeof(szStartChArray)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szStartChArray, sizeof(szStartChArray)-1); 
                     odata[0].cb += sizeof(szStartChArray)-1;
 
                     // now get the gpio token
@@ -5033,11 +6677,11 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 PORTCH *    pPort       = pjcmd.igpio.pin[pjcmd.igpio.iPin].pPort;
                                 uint32_t    pinMask     = pjcmd.igpio.pin[pjcmd.igpio.iPin].pinMask;
 
-                                memcpy(&rgchOut[odata[0].cb], szSetParmStatusCode, sizeof(szSetParmStatusCode)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szSetParmStatusCode, sizeof(szSetParmStatusCode)-1); 
                                 odata[0].cb += sizeof(szSetParmStatusCode)-1;
 
                                 // assume we have good status
-                                rgchOut[odata[0].cb++] = '0';
+                                pchJSONRespBuff[odata[0].cb++] = '0';
 
                                 // assume we can change the PIN state
                                 pjcmd.igpio.pin[pjcmd.igpio.iPin].gpioState = pjcmd.igpio.pinState;
@@ -5078,13 +6722,13 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                         odata[0].cb--;
 
                                         // put in the error code
-                                        itoa((int32_t) GPIOInvalidDirection, &rgchOut[odata[0].cb], 10);
-                                        odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                        itoa((int32_t) GPIOInvalidDirection, &pchJSONRespBuff[odata[0].cb], 10);
+                                        odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                         break;
                                 }
 
                                 // write out the wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
                             }
                             break;
@@ -5095,57 +6739,57 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 char const * const  szDirection = rgszGpioDirections[pjcmd.igpio.pin[pjcmd.igpio.iPin].gpioState];
                                 uint32_t            cbDirection =  strlen(szDirection);
 
-                                memcpy(&rgchOut[odata[0].cb], szGpioReadStatusCode, sizeof(szGpioReadStatusCode)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szGpioReadStatusCode, sizeof(szGpioReadStatusCode)-1); 
                                 odata[0].cb += sizeof(szGpioReadStatusCode)-1;
 
                                 // if this is an input
                                 if(gpioState == gpioInput || gpioState == gpioInputPullDown || gpioState == gpioInputPullUp)
                                 {
-                                    rgchOut[odata[0].cb++] = '0';
+                                    pchJSONRespBuff[odata[0].cb++] = '0';
                                 }
 
                                 // otherwise we are getting a direction missmatch
                                 else
                                 {
                                     // put out a warning that the pin direction is wrong
-                                    itoa((int32_t) GPIODirectionMissMatch, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    itoa((int32_t) GPIODirectionMissMatch, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 }
 
                                 // put out the direction
-                                memcpy(&rgchOut[odata[0].cb], szGpioDirection, sizeof(szGpioDirection)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szGpioDirection, sizeof(szGpioDirection)-1); 
                                 odata[0].cb += sizeof(szGpioDirection)-1;
-                                memcpy(&rgchOut[odata[0].cb], szDirection, cbDirection); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szDirection, cbDirection); 
                                 odata[0].cb += cbDirection;
                                 
                                 // put out the value
                                 if( (pjcmd.igpio.pin[pjcmd.igpio.iPin].pPort->PORT & pjcmd.igpio.pin[pjcmd.igpio.iPin].pinMask) == 0 )
                                 {
-                                    memcpy(&rgchOut[odata[0].cb], szGpioValue0, sizeof(szGpioValue0)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szGpioValue0, sizeof(szGpioValue0)-1); 
                                     odata[0].cb += sizeof(szGpioValue0)-1;      
                                 }
                                 else
                                 {
-                                    memcpy(&rgchOut[odata[0].cb], szGpioValue1, sizeof(szGpioValue1)-1); 
+                                    memcpy(&pchJSONRespBuff[odata[0].cb], szGpioValue1, sizeof(szGpioValue1)-1); 
                                     odata[0].cb += sizeof(szGpioValue1)-1;      
                                 }
 
                                 // write out the wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
                             }
                             break;
 
                         case JSPARGpioWrite:
                             {
-                                memcpy(&rgchOut[odata[0].cb], szGpioWriteStatusCode, sizeof(szGpioWriteStatusCode)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szGpioWriteStatusCode, sizeof(szGpioWriteStatusCode)-1); 
                                 odata[0].cb += sizeof(szGpioWriteStatusCode)-1;
 
                                 // if this is an input
                                 if(pjcmd.igpio.pin[pjcmd.igpio.iPin].gpioState == gpioOutput)
                                 {
                                     // assume we have good status
-                                    rgchOut[odata[0].cb++] = '0';
+                                    pchJSONRespBuff[odata[0].cb++] = '0';
 
                                     switch(pjcmd.igpio.value)
                                     {
@@ -5163,8 +6807,8 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                             odata[0].cb--;
 
                                             // put in the error code
-                                            itoa((int32_t) ValueOutOfRange, &rgchOut[odata[0].cb], 10);
-                                            odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                            itoa((int32_t) ValueOutOfRange, &pchJSONRespBuff[odata[0].cb], 10);
+                                            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                             break;
                                     }
                                 }
@@ -5173,12 +6817,12 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                                 else
                                 {
                                     // put out a warning that the pin direction is wrong
-                                    itoa((int32_t) GPIODirectionMissMatch, &rgchOut[odata[0].cb], 10);
-                                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                                    itoa((int32_t) GPIODirectionMissMatch, &pchJSONRespBuff[odata[0].cb], 10);
+                                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
                                 }
 
                                 // write out the wait 0
-                                memcpy(&rgchOut[odata[0].cb], szWait0, sizeof(szWait0)-1); 
+                                memcpy(&pchJSONRespBuff[odata[0].cb], szWait0, sizeof(szWait0)-1); 
                                 odata[0].cb += sizeof(szWait0)-1;
                             }
                             break;
@@ -5195,7 +6839,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 if(jsonToken == tokEndArray) 
                 {
                     // put out end of array
-                    memcpy(&rgchOut[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szEndArray, sizeof(szEndArray)-1); 
                     odata[0].cb += sizeof(szEndArray)-1;
                                 
                     // needs to be reset for next multi command
@@ -5248,7 +6892,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARTestArray:
                 if(jsonToken == tokArray)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szTest, sizeof(szTest)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szTest, sizeof(szTest)-1); 
                     odata[0].cb += sizeof(szTest)-1;
 
                     // root command strings for test
@@ -5281,7 +6925,7 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
             case OSPARTestRun:
                 if(jsonToken == tokStringValue)
                 {
-                    memcpy(&rgchOut[odata[0].cb], szTestRun, sizeof(szTestRun)-1); 
+                    memcpy(&pchJSONRespBuff[odata[0].cb], szTestRun, sizeof(szTestRun)-1); 
                     odata[0].cb += sizeof(szTestRun)-1;
 
                     // get next member name
@@ -5296,14 +6940,14 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
                 {
 
                     // Run the manufacturing test and put out the result
-                    utoa(MfgTest(pjcmd.iMfgTest.testNbr), &rgchOut[odata[0].cb], 10);
-                    odata[0].cb += strlen(&rgchOut[odata[0].cb]);
+                    utoa(MfgTest(pjcmd.iMfgTest.testNbr), &pchJSONRespBuff[odata[0].cb], 10);
+                    odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
 
                     // close out the command
-                    rgchOut[odata[0].cb++] ='}';
+                    pchJSONRespBuff[odata[0].cb++] ='}';
 
                     // get next member name
-                    stateEndArray = OSPARDeviceEndArray;
+                    stateEndArray = OSPARTopEndArray;
                     stateValueSep = OSPARSeparatedObject;
                     state = OSPARSkipValueSep;
                 }
@@ -5318,6 +6962,677 @@ STATE OSPAR::ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonTo
     } while(fContinue || state == OSPARSyntaxError);
 
     return(Idle);
+}
+
+/************************************************************************/
+/*    Parser helper methods                                             */
+/************************************************************************/
+
+uint32_t OSPAR::Uint32FromStr(STRU32 const * const rgStrU32L, uint32_t cStrU32L, char const * const sz, uint32_t cb, STATE defaultState)
+{
+    uint32_t i = 0;
+
+    for(i = 0; i < cStrU32L; i++)
+    {
+        if((strlen(rgStrU32L[i].szToken) == cb) && memcmp(sz, rgStrU32L[i].szToken, cb) == 0)
+        {
+            return(rgStrU32L[i].u32);
+        }
+    }
+
+    return(defaultState);
+}
+
+/************************************************************************/
+/*    OSPAR callback routines.                                          */
+/************************************************************************/
+
+GCMD::ACTION OSPAR::WriteOSJBFile(char const pchWrite[], int32_t cbWrite, int32_t& cbWritten)
+{
+    STATE curState = IOWriteFileN(uicmd.iFile.dFile, uicmd.iFile.vol, uicmd.iFile.szPath, uicmd.iFile.iFilePosition, pchWrite, cbWrite, &cbWritten);
+
+    if(curState == Idle)
+    {
+        uicmd.iFile.buffLock = LOCKAvailable;
+        return(GCMD::DONE);
+    }
+    else if(curState == IOWrite)
+    {
+        uicmd.iFile.iFilePosition += cbWritten;
+
+        if(cbWritten == cbWrite) return(GCMD::READ);
+    }
+    else
+    {
+        uicmd.iFile.buffLock = LOCKAvailable;
+        return(GCMD::ERROR);
+    }
+ 
+    return(GCMD::CONTINUE);
+}
+
+GCMD::ACTION OSPAR::ReadFile(int32_t iOData, uint8_t const *& pbRead, int32_t& cbRead)
+{
+    ODATA& oData = odata[iOData];
+
+    static_assert(sizeof(pchJSONRespBuff) >= DFILE::FS_DEFAULT_BUFF_SIZE, "pchJSONRespBuff is too small");
+
+    // if the file is open, start returning data
+    if(dGFile)
+    {
+        uint32_t cbMax = min(min(dGFile.fssize()-dGFile.fstell(), sizeof(pchJSONRespBuff)), oData.cb - oData.iOut);
+
+        cbRead = 0;
+        if(IsStateAnError(IOReadFileN(dGFile, uicmd.iFile.vol, uicmd.iFile.szPath, dGFile.fstell(), pchJSONRespBuff, cbMax, (uint32_t *) &cbRead)))
+        {
+            if(dGFile) dGFile.fsclose();
+            oData.iOut = 0;
+            pbRead = NULL;
+            cbRead = 0;
+            return(GCMD::ERROR);
+        }
+
+        if(cbRead > 0) 
+        {
+                pbRead = (uint8_t *) pchJSONRespBuff;
+                oData.iOut += cbRead;
+                return(GCMD::WRITE);
+        }
+    }
+    else
+    {
+        pbRead = NULL;
+        cbRead = 0;
+        oData.iOut = 0;
+        return(GCMD::DONE);
+    }
+
+    return(GCMD::CONTINUE);
+ }
+
+GCMD::ACTION OSPAR::ReadJSONResp(int32_t iOData, uint8_t const *& pbRead, int32_t& cbRead)
+{
+    ODATA& oData = odata[iOData];
+
+    if(*oData.pLockState != LOCKOutput)
+    {
+        return(GCMD::ERROR);
+    }
+    else if(oData.iOut == 0)
+    {
+        oData.iOut = oData.cb;
+        pbRead = oData.pbOut;
+        cbRead = oData.cb;
+        return(GCMD::WRITE);
+    }
+    else if(oData.iOut == (uint32_t) oData.cb)
+    {
+        pbRead = NULL;
+        cbRead = 0;
+        oData.iOut = 0;
+        *oData.pLockState = LOCKAvailable;
+        return(GCMD::DONE);
+    }
+
+    pbRead = NULL;
+    cbRead = 0;
+    oData.iOut = 0;
+    *oData.pLockState = LOCKAvailable;
+    return(GCMD::ERROR);
+}
+
+
+GCMD::ACTION OSPAR::ReadLogFile(int32_t iOData, uint8_t const *& pbRead, int32_t& cbRead)
+{
+    ODATA&      oData   = odata[iOData];
+    IALOG&      ialog   = (oData.id == ALOG1_ID) ? pjcmd.iALog1 : pjcmd.iALog2;
+    DFILE&      dFile = *((DFILE *) ialog.pdFile);
+
+    static_assert(sizeof(pchJSONRespBuff) >= DFILE::FS_DEFAULT_BUFF_SIZE, "pchJSONRespBuff is too small");
+
+    if(*oData.pLockState == LOCKAvailable) 
+    {
+        // if not running and was closed, close when we are done
+        oData.pbOut = (!dFile && ialog.state.instrument == Idle) ? NULL : (uint8_t *) pchJSONRespBuff;      // this is just a flag
+        *oData.pLockState = LOCKOutput;
+    }
+
+    ASSERT(*oData.pLockState == LOCKOutput);
+
+    cbRead = 0;
+    pbRead = NULL;
+
+    // open the file if it needs to be open
+    if(oData.cb == 0)
+    {
+        if(oData.pbOut == NULL) dFile.fsclose();     
+        *oData.pLockState = LOCKAvailable;
+        return(GCMD::DONE);
+    }
+
+    else if(!dFile &&
+        (DFATFS::fschdrive(DFATFS::szFatFsVols[ialog.vol])                      != FR_OK    || 
+            DFATFS::fschdir(DFATFS::szRoot)                                     != FR_OK    ||
+            dFile.fsopen(ialog.szURI, FA_OPEN_EXISTING | FA_WRITE | FA_READ)    != FR_OK    ))
+    {
+        dFile.fsclose();
+        *oData.pLockState = LOCKAvailable;
+        return(GCMD::ERROR);
+    }
+
+    else if(dFile.fstell() == oData.iOut || dFile.fslseek(oData.iOut) == FR_OK)
+    {
+        int32_t    cbThisRead = min(oData.cb, (int32_t) (sizeof(pchJSONRespBuff) - (sizeof(pchJSONRespBuff) %_FATFS_CBSECTOR_)));
+
+        pbRead = (uint8_t *) pchJSONRespBuff;
+        dFile.fsread ((void *) pbRead, cbThisRead, (uint32_t *) &cbRead, DFILE::FS_INFINITE_SECTOR_CNT);
+        oData.cb    -= cbRead;
+        oData.iOut  += cbRead;
+
+        return(GCMD::WRITE);
+    }
+
+    else
+    {
+        dFile.fsclose();
+        *oData.pLockState = LOCKAvailable;
+        return(GCMD::ERROR);
+    }
+}
+
+/************************************************************************/
+/*    RFC 7159 say JSON-text = ws value ws                              */
+/*    however JSON-text = ws object ws                                  */
+/*    is a valid subset that we are going to adhear to.                 */
+/*    If doing chunks, we will parse ws to the end of the chunk         */
+/************************************************************************/
+
+GCMD::ACTION OSPAR::StreamOS(char const * szStream, int32_t cbStream)
+{
+    bool fYield     = false;
+    bool fNewError  = false;
+    bool fContinue  = false;
+
+    do
+    {
+        fContinue   = false;
+        fYield      = false;
+        
+        switch(stateOSJB)
+        {
+            case Idle:
+                Init(OSPAR::ICDNone);
+
+                // lock us for JSON input parsing
+                *odata[0].pLockState = LOCKInput;
+
+                stateOSJB           = OSJBSkipWhite;
+                stateOSJBNextWhite  = OSJBReadJSON;
+                // fall thru
+
+            case OSJBSkipWhite:
+                if(IsWhite(szStream[iStream])) iStream++;
+                else stateOSJB = stateOSJBNextWhite;   
+                fContinue = true;
+                break;
+
+            case OSJBSkipWhiteToEndOfChunk:
+
+                if(cbChunk > 0 && cbChunk-iChunk > 0)
+                {
+                    if(IsWhite(szStream[iStream])) 
+                    {
+                        iStream++;
+
+                        // The stream will advance iChunk, see if we are done
+                        // we have to do this here because chunking will just silently advance to the next chunk
+                        if(cbChunk-iChunk == 1) stateOSJB = stateOSJBNextWhite;  
+                    }
+                    else fNewError = true; 
+
+                }
+
+                else ASSERT(NEVER_SHOULD_GET_HERE); 
+
+                fContinue = true;
+                break;
+
+            case OSJBReadJSON:
+                // if this is JSON, go parse it
+                if(IsOSCmdStart(szStream[iStream]) == OSPAR::JSON) stateOSJB = OSJBParseJSON;
+
+                // if this is OSJB, prepare to read binary
+                else if(IsOSCmdStart(szStream[iStream]) == OSPAR::OSJB)
+                {
+                        stateOSJBNextChunk      = OSJBParseJSON;
+                        stateOSJB               = OSJBReadCount;
+                }
+
+                // some thing unexpected is happening
+                else fNewError = true;
+
+                // we did very little here, so lets just do the next step immediately
+                fContinue = true;
+                break;
+
+            // if we get here, we are expecting OSJB
+            case OSJBReadNextChunk:
+                if(szStream[iStream] == '\r')
+                {
+                    cbChunk         = 0;
+                    iChunk          = -1;   // so we don't loop trying to read the next chunk
+                    iChunkStart     = -1;
+                    stateOSJB       = OSJBNewLine;
+                }
+                else
+                {
+                    fNewError = true;
+                }
+                break;
+
+            case OSJBReadCount:
+                if(IsOSCmdStart(szStream[iStream]) == OSPAR::OSJB)
+                {
+                    szOSJBCount[iOSJBCount++]   = szStream[iStream++];
+                    fContinue = true;
+                }
+                else if(szStream[iStream] == '\r')
+                {
+                    iStream++;
+                    szOSJBCount[iOSJBCount]     = '\0';
+                    cbChunk = strtol(szOSJBCount, NULL, 16);
+                    iChunk          = 0;
+                    iChunkStart     = iStream + 1;      // add the new line
+
+                    iOSJBCount   = 0;
+                    stateOSJB = OSJBNewLine;
+                    if(cbChunk == 0) stateOSJBNextNewLine = OSJBCarrageReturn;
+                    else stateOSJBNextNewLine = stateOSJBNextChunk;
+                }
+                else 
+                {
+                    fNewError = true;
+                }
+                break;
+
+            case OSJBCarrageReturn:
+                if(szStream[iStream] == '\r')
+                {
+                    iStream++;
+                    stateOSJB = OSJBNewLine;
+                    if(cbChunk == 0) stateOSJBNextNewLine =  OSJBOutputJSON;
+                    fContinue = true;
+                }
+                else 
+                {
+                    fNewError = true;
+                }
+                break;
+
+            case OSJBNewLine:
+                if(szStream[iStream] == '\n')
+                {
+                    iStream++;
+                    stateOSJB = stateOSJBNextNewLine;
+                    fContinue = true;
+                }
+                else 
+                {
+                    fNewError = true;
+                }
+                break;
+
+            case OSJBParseJSON:
+                {
+                    int32_t cbDataStream = (cbChunk <= 0) ? cbStream : min(cbStream, cbChunk-iChunk);
+
+                    // call the lexer
+                    switch(LexJSON(&szStream[iStream], cbDataStream-iStream, cbConsumed))
+                    {
+                        case GCMD::CONTINUE:
+                            fYield = true; 
+                            break;
+
+                        case GCMD::READ:                                                           
+                            cbConsumed -= (cbDataStream-iStream); // this can go neg if the token is not fully parsed
+                            iStream = cbDataStream;
+                            break;
+
+                        case GCMD::ERROR:
+                            fNewError = true;
+                            break;
+
+                        case GCMD::DONE:
+                            iStream += cbConsumed;
+                            cbConsumed = 0;
+                            if(cbChunk > 0) 
+                             {
+                                 // if we are already at the end of the chunk
+                                if((iStream - iChunkStart) == cbChunk)
+                                {
+                                    stateOSJB = OSJBReadNextBinary;
+                                }
+
+                                // otherwise skip white spaces until the end of the chunk
+                                else
+                                {
+                                    stateOSJB           = OSJBSkipWhiteToEndOfChunk;
+                                    stateOSJBNextWhite  = OSJBReadNextBinary;
+                                }
+                            }
+
+                            // if we are not in chunks, we are done.
+                            else 
+                            {
+                                stateOSJB       = OSJBOutputJSON;
+                            }
+                            break;
+
+                        default:
+                            break;
+
+                    }
+                }
+                break;
+
+            case OSJBReadNextBinary:
+                {
+                    int32_t     i;
+                    int32_t     deltaBinary = 0x7FFFFFFF;
+
+                    // look for the binary section for where we are at.
+                    iBinaryDone = -1;
+                    WriteData   = NULL;
+                    for(i=0; i<cIData; i++)
+                    {
+                        int32_t deltaBinaryCur = idata[i].iBinary - iBinary;
+                        if(deltaBinaryCur >= 0 && deltaBinaryCur < deltaBinary) 
+                        {
+                            deltaBinary = deltaBinaryCur;
+                            if(deltaBinary == 0)
+                            {
+                                WriteData   = idata[i].WriteData;
+                                iBinaryDone = idata[i].iBinary + idata[i].cb;
+                                break;
+                            }
+                            else iBinaryDone = iBinary + deltaBinary;
+                        }
+                    }
+
+                    if(iBinaryDone == -1) fNewError = true;
+                    else stateOSJB = OSJBReadBinary; 
+                }
+                break;
+
+            case OSJBReadBinary:
+                {
+                    int32_t cbWritten = 0;
+                    int32_t cbWrite = min(min(cbStream-iStream, cbChunk-iChunk), iBinaryDone-iBinary);
+
+                    // not a good thing to have happen
+                    if(cbWrite < 0)
+                    {
+                        cbWrite = 0;
+                        fNewError = true;
+                    }
+
+                    if(WriteData != NULL)
+                    {
+
+                        switch((this->*WriteData)(&szStream[iStream], cbWrite, cbWritten))
+                        {
+                            case GCMD::DONE:
+                                ASSERT(cbWrite == 0 && cbWritten == 0);
+                                if(iBinary != iBinaryDone) fNewError = true;
+                                stateOSJB = OSJBReadNextBinary;          
+                                break;
+
+                            case GCMD::CONTINUE:
+                                fYield = true; 
+                                // fall thru
+
+                            // need more data
+                            case GCMD::READ:
+
+                                // update pointers
+                                iStream += cbWritten;
+                                iBinary += cbWritten;
+
+                                // iBinary could == iBinaryDone
+                                // also we could be done with the chunk and that will
+                                // automatically cause a chunk read, and to look at the next chunk
+                                // we don't want to go to the next chunk if this is the end of the binary
+                                // we want to come through again and send a zero to the Write
+                                // so yield if this is the end of the binary
+                                fYield |= (iBinary >= iBinaryDone);
+
+                                // in general we don't have to skip the potential READ if 
+                                // iStream == cbStream because we know there is a cbChunk of 0 and 2 /cr an /n comming.
+                                // basically, we know the input stream is not done.
+
+                                break;
+
+                            case GCMD::ERROR:
+                            default:
+                                // try to close the file, zero count will do that.
+                                (this->*WriteData)(&szStream[iStream], 0, cbWritten);
+                                fNewError = true;
+                                break;
+                        }
+
+                    }
+
+
+                    // skipping binary
+                    else
+                    {
+                        // update pointers
+                        iStream += cbWrite;
+                        iBinary += cbWrite;
+
+                        // when we have skipped it, go to the next Binary
+                        if(iBinary == iBinaryDone) stateOSJB = OSJBReadNextBinary;                     
+                    }
+                }
+                break;
+
+            case OSJBOutputJSON:
+
+                // clean up reading.
+                cbStreamInception += iStream;
+                iStream = 0;
+                fWrite = true;
+
+                // if we are doing chunks
+                iOData = 0;
+                *odata[0].pLockState = LOCKOutput;
+                iBinary = 0;
+
+                if(cOData > 1) stateOSJB = OSJBWriteChunkSize;
+                else stateOSJB = OSJBWriteOData;
+
+                fYield = true;
+                break;
+
+            case OSJBWriteChunkSize:
+
+                // assume we have data to write out.
+                stateOSJB = OSJBWriteOData;
+
+                iChunk = 0;     // where are we in the psudo chunk (OData).
+
+                // only writing JSON, no chunks, and we are done
+                if(cOData == 1)
+                {
+                    // put a \r\n after the JSON
+                    cbOutput = 0;
+                    szOSJBCount[cbOutput++] = '\r';
+                    szOSJBCount[cbOutput++] = '\n';
+                    pbOutput = (uint8_t *) szOSJBCount;
+
+                    // uncomment and the \r\n will not go out
+//                    fYield = true;      // skip reading and writing
+//                    fContinue = true;   // this was quick, so just go there
+
+                    stateOSJB = Done;   // we are done, there are no chunks
+                }
+
+                // if this is the first chunk, it is the JSON chunk
+                else if(iOData == 0)
+                {
+                    // create the length of the JSON part of the message
+                    itoa(odata[0].cb, szOSJBCount, 16);
+                    cbOutput = strlen(szOSJBCount);
+                    szOSJBCount[cbOutput++] = '\r';
+                    szOSJBCount[cbOutput++] = '\n';
+                    pbOutput = (uint8_t *) szOSJBCount;
+                }
+
+                // the binary chunk
+                else if(iOData == 1)
+                {
+                    int32_t i;
+                    int32_t cb = 0;
+
+                    // we just merge all chunks into one.
+                    for(i=1; i<cOData; i++) cb += odata[i].cb;
+
+                    // put a \r\n after the JSON
+                    cbOutput = 0;
+                    szOSJBCount[cbOutput++] = '\r';
+                    szOSJBCount[cbOutput++] = '\n';
+
+                    // put out the binary length
+                    itoa(cb, &szOSJBCount[cbOutput], 16);
+                    cbOutput += strlen(&szOSJBCount[cbOutput]);
+                    szOSJBCount[cbOutput++] = '\r';
+                    szOSJBCount[cbOutput++] = '\n';
+                    pbOutput = (uint8_t *) szOSJBCount;
+                }
+
+                // the last chunk
+                else if(cOData == iOData)
+                {
+                    // put our the chunk terminator
+                    pbOutput = (uint8_t *) szTerminateChunk;
+                    cbOutput = sizeof(szTerminateChunk) - 1;
+                    stateOSJB = Done;
+                }
+
+                // all the intermediate chunks are merged into the 2nd chunk, so just skip
+                else
+                {
+                    fYield = true;      // skip reading and writing
+                    fContinue = true;   // this was quick, so just go there
+                }
+                break;
+
+            case OSJBWriteOData:
+
+                if(odata[iOData].ReadData != NULL)
+                {
+                    switch((this->*odata[iOData].ReadData)(iOData, pbOutput, cbOutput))
+                    {
+                        case GCMD::WRITE:
+                            iBinary += cbOutput;
+                            iChunk  += cbOutput;
+                            break;
+
+                        case GCMD::CONTINUE:
+                            fYield = true;      // skip reading and writing
+                            break;
+
+                        case GCMD::DONE:
+                            stateOSJB = OSJBWriteChunkSize;
+                            iOData++;
+                            fYield = true;      // skip reading and writing
+                            break;
+
+                        default:
+                            ASSERT(NEVER_SHOULD_GET_HERE); 
+                            break;
+                    }
+                }
+                else ASSERT(NEVER_SHOULD_GET_HERE); 
+                break;
+
+            case Done:
+                stateOSJB = Idle;
+                return(GCMD::DONE);
+    
+        }
+
+        if(fNewError)
+        {
+            stateOSJB   = Idle;
+            fError      = true;
+
+            // Error Code
+            strcpy(pchJSONRespBuff, szStatusCode);
+            odata[0].cb = sizeof(szStatusCode)-1;
+            utoa(InvalidSyntax, &pchJSONRespBuff[odata[0].cb], 10);
+            odata[0].cb = strlen(pchJSONRespBuff);
+
+            // location
+            memcpy(&pchJSONRespBuff[odata[0].cb], szCharLocation, sizeof(szCharLocation)-1);
+            odata[0].cb += sizeof(szCharLocation)-1;
+            itoa(cbStreamInception+iStream+cbConsumed, &pchJSONRespBuff[odata[0].cb], 10);
+            odata[0].cb += strlen(&pchJSONRespBuff[odata[0].cb]);
+                
+            // end the error code
+            memcpy(&pchJSONRespBuff[odata[0].cb], szEndError, sizeof(szEndError)-1);
+            odata[0].cb += sizeof(szEndError)-1;
+
+            // write out the error
+            stateOSJB = OSJBOutputJSON;
+            cOData = 1;
+        }
+
+        // update the chunk count
+        if(!fYield)
+        {
+            if(fWrite)
+            {
+                return(GCMD::WRITE);
+            }
+
+            else
+            {
+                if(cbChunk > 0)
+                {
+                    iChunk = iStream - iChunkStart;
+
+                    if(iChunk == cbChunk)
+                    {
+                        iChunk                  = -2;
+                        cbChunk                 = -1;   // so /cr does not take us to done
+                        stateOSJBNextChunk      = stateOSJB;
+                        stateOSJBNextNewLine    = OSJBReadCount;
+                        stateOSJB               = OSJBCarrageReturn;                
+                    }
+                }
+
+                // see if we need to read more data
+                if(iStream == cbStream) 
+                {
+                    // adjust for moving iStream
+                    if(cbChunk > 0) iChunkStart -= iStream;
+
+                    cbStreamInception += iStream;
+                    iStream = 0;
+            
+                    if(stateOSJB != OSJBOutputJSON)
+                    {
+                       // need more data
+                        return(GCMD::READ);
+                    }
+                }
+            }
+        }
+
+    } while(fContinue);
+    
+    return(GCMD::CONTINUE);
 }
 
 

@@ -98,8 +98,9 @@ FRESULT DFILE::fswrite (const void* buff, uint32_t btw, uint32_t* bw, uint32_t c
     // check to see that we don't exceed our read/write size
     if(cSectorMax != FS_INFINITE_SECTOR_CNT && btw > (cSectorMax * _CB_SECTOR_))
     {
-        *bw = 0;
-        return(FR_INVALID_PARAMETER);
+//        *bw = 0;
+//        return(FR_INVALID_PARAMETER);
+            btw = (cSectorMax * _CB_SECTOR_);
     }
 
     return(f_write (&_file, buff, btw, bw));

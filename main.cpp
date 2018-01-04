@@ -169,6 +169,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused)) char** argv) 
         LEDTask();
         CFGSdHotSwapTask();
         JSONCmdTask();              // Process the JSON queued commands
+        LoopStatsTask();
     }
 
     return 0;

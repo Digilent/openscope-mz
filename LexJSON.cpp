@@ -46,16 +46,28 @@ char const *  JSON::SkipWhite(char const * sz, uint32_t cbsz)
     return(sz + i);
 }
 
-GCMD::ACTION  JSON::LexJSON(char const * szInput, uint32_t cbInput)
+GCMD::ACTION  JSON::LexJSON(char const * szInput, int32_t cbInput, int32_t& cbConsumed)
 {
-    szMoveInput = szInput;
 
     while(true)
     {
+        szMoveInput = szTokenBuff;
+
+        if(cbTokenBuff < (int32_t) sizeof(szTokenBuff) && iInput < cbInput)
+        {
+            uint32_t cbCopy = min((int32_t) sizeof(szTokenBuff) - cbTokenBuff, cbInput - iInput);
+            memcpy(&szTokenBuff[cbTokenBuff], &szInput[iInput], cbCopy);
+            iInput += cbCopy;
+            cbTokenBuff += cbCopy;
+        }
 
         // this should never happen on a state of Idle 
         // as cbToken == 0 at Idle
-        if(cbToken > cbInput) return(GCMD::READ);
+        if(cbToken > cbTokenBuff) 
+        {
+            iInput = 0;
+            return(GCMD::READ);
+        }
 
         switch(state)
         {
@@ -67,32 +79,28 @@ GCMD::ACTION  JSON::LexJSON(char const * szInput, uint32_t cbInput)
             case JSONSkipWhite:
                 {
                     cbToken = 0;
-                    szMoveInput = SkipWhite(szMoveInput, cbInput - (szMoveInput - szInput));
+                    szMoveInput = SkipWhite(szMoveInput, cbTokenBuff - (szMoveInput - szTokenBuff));
 
+                    // Depleated our buffer, so continue to look for white space
+                    if(cbTokenBuff == 0)
+                    {
+                        iInput = 0;
+                        return(GCMD::READ);                    
+                    }
+                    
                     // found the start of a token
-                    if(szMoveInput == szInput && cbInput > 0)
+                    else if(szMoveInput == szTokenBuff)
                     {
                         state = JSONToken;
                         break;
                     }
-
-                    // found the start of the token but need to shift the input
-                    // we don't need to read more characters.
-                    else if(szMoveInput < (szInput + cbInput))
-                    {
-                        return(GCMD::CONTINUE);
-                    }
-
-                    // we need to shift and read more characters
-                    else
-                    {
-                        return(GCMD::READ);
-                    }
-                }
+                 
+                    // otherwise shift and continue
+                 }
                 break;
 
             case JSONToken:
-                switch(szInput[0])
+                switch(szTokenBuff[0])
                 {
 
                     //VALUES
@@ -250,7 +258,7 @@ GCMD::ACTION  JSON::LexJSON(char const * szInput, uint32_t cbInput)
                             break;
                         }
 
-                        if(szInput[0] == '0') cZero = 0;
+                        if(szTokenBuff[0] == '0') cZero = 0;
                         else cZero = cAny;
 
                         // normal case
@@ -331,24 +339,24 @@ GCMD::ACTION  JSON::LexJSON(char const * szInput, uint32_t cbInput)
                 break;
 
             case JSONfalse:
-                if(memcmp(szInput, "false", 5) == 0) state = JSONCallOSLex;
+                if(memcmp(szTokenBuff, "false", 5) == 0) state = JSONCallOSLex;
                 else state = JSONSyntaxError;
                 break;
 
             case JSONnull:
-                if(memcmp(szInput, "null", 4) == 0) state = JSONCallOSLex;
+                if(memcmp(szTokenBuff, "null", 4) == 0) state = JSONCallOSLex;
                 else state = JSONSyntaxError;
                 break;
 
             case JSONtrue:
-                if(memcmp(szInput, "true", 4) == 0) state = JSONCallOSLex;
+                if(memcmp(szTokenBuff, "true", 4) == 0) state = JSONCallOSLex;
                 else state = JSONSyntaxError;
                 break;
 
             case JSONString:
-                for(; cbToken <= cbInput; cbToken++)
+                for(; cbToken <= cbTokenBuff; cbToken++)
                 {
-                    if(szInput[cbToken-1] == '"' && szInput[cbToken-2] != '\\')
+                    if(szTokenBuff[cbToken-1] == '"' && szTokenBuff[cbToken-2] != '\\')
                     {
                         // the question is, should the underlying code
                         // get escape sequences, or should they somehow be stripped
@@ -362,9 +370,9 @@ GCMD::ACTION  JSON::LexJSON(char const * szInput, uint32_t cbInput)
 
                 // what if the number is the last in the file
             case JSONNumber:
-                for(; cbToken <= cbInput; cbToken++)
+                for(; cbToken <= cbTokenBuff; cbToken++)
                 {
-                    char cch = szInput[cbToken-1];
+                    char cch = szTokenBuff[cbToken-1];
 
                     if(cch == '0')
                     {
@@ -415,11 +423,11 @@ GCMD::ACTION  JSON::LexJSON(char const * szInput, uint32_t cbInput)
                             cZero = 0;
                         }
                     }
-                    else if(cch == '+' && fExponent && (szInput[cbToken-2] == 'e' || szInput[cbToken-2] == 'E'))
+                    else if(cch == '+' && fExponent && (szTokenBuff[cbToken-2] == 'e' || szTokenBuff[cbToken-2] == 'E'))
                     {
                             cZero = 0;
                     }
-                    else if(cch == '-' && fExponent && (szInput[cbToken-2] == 'e' || szInput[cbToken-2] == 'E'))
+                    else if(cch == '-' && fExponent && (szTokenBuff[cbToken-2] == 'e' || szTokenBuff[cbToken-2] == 'E'))
                     {
                             fNegativeExponent = true;
                             cZero = 0;
@@ -451,7 +459,7 @@ GCMD::ACTION  JSON::LexJSON(char const * szInput, uint32_t cbInput)
 
                 // call the OpenScope lexer here
                 // LexOpenScope(char const * szJSON, uint32_t cbJSON);
-                if((tokenLexState = ParseToken(szInput, cbToken, jsonToken)) == Idle)
+                if((tokenLexState = ParseToken(szTokenBuff, cbToken, jsonToken)) == Idle)
                 {
                     state = JSONNextToken;
 
@@ -468,6 +476,9 @@ GCMD::ACTION  JSON::LexJSON(char const * szInput, uint32_t cbInput)
               
            case JSONNextToken:
 
+                // consume the token
+                szMoveInput =  szTokenBuff + cbToken;
+
                 if(jsonToken == tokEndOfJSON)
                 {
                     state = Done;
@@ -482,8 +493,7 @@ GCMD::ACTION  JSON::LexJSON(char const * szInput, uint32_t cbInput)
                     break;
                 }
 
-                // skip ws
-                szMoveInput =  szInput + cbToken;
+                // go to skip more white space
                 state = JSONSkipWhite;
 
                 // put in what the next parsing state is
@@ -550,8 +560,19 @@ GCMD::ACTION  JSON::LexJSON(char const * szInput, uint32_t cbInput)
                 else return(GCMD::ERROR);
                 break;
         }
+
+        // shift the token buffer if needed
+        if(szMoveInput > szTokenBuff)
+        {
+            int32_t cbMove = (szMoveInput - szTokenBuff);
+            cbTokenBuff -= cbMove;
+            cbConsumed  += cbMove;
+            memcpy(szTokenBuff, szMoveInput, cbTokenBuff);
+            cbToken = 0;
+        }
     }
 
+    ASSERT(NEVER_SHOULD_GET_HERE);
     return(GCMD::CONTINUE);
 }
 

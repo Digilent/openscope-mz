@@ -169,7 +169,7 @@ int DMASerial::readBuffer(uint8_t * pBuffF, uint32_t cbBuffF)
     return(true);
 }
 
-int DMASerial::writeBuffer(uint8_t * pBuf, uint32_t cbBuf, volatile void * pDMA)
+int DMASerial::writeBuffer(uint8_t const * pBuf, uint32_t cbBuf, volatile void * const pDMA)
 {
     if(isDMATxDone()) 
     {

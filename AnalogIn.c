@@ -15,6 +15,10 @@
 /************************************************************************/
 #include <OpenScope.h>
 
+extern void TimeOutTmr9(void);
+
+// static uint32_t tStartL;
+
 // cDadc must divide by 2 evenly
 bool OSCReorder(int16_t rgDadc[], uint32_t cDadc)
 {
@@ -379,12 +383,12 @@ bool OSCVinFromDadcArray(HINSTR hOSC, int16_t rgDadc[], uint32_t cDadc)
 STATE OSCRun(HINSTR hOSC, IOSC * piosc)
 {
     uint32_t volatile __attribute__((unused)) flushADC;
-    OSC * pOSC = (OSC *) hOSC;
+    OSC * pOSC = piosc->posc;
     STATE retState = Idle;
     STATE myState = Idle;
     uint32_t tCur = 0;
     
-    if(hOSC == NULL)
+    if(piosc == NULL)
     {
         return(STATEError);
     }
@@ -406,13 +410,13 @@ STATE OSCRun(HINSTR hOSC, IOSC * piosc)
     {
         case Idle:
 
-            if(!OSCSetGain(hOSC, piosc->gain))
+            if(!OSCSetGain((HINSTR) pOSC, piosc->gain))
             {
                 return(OSCGainOutOfRange);
             }
     
             // this will return immediately if the offset PWM is already set up
-            if((retState = OSCSetOffset(hOSC, piosc->mvOffset)) != Idle)
+            if((retState = OSCSetOffset((HINSTR) pOSC, piosc->mvOffset)) != Idle)
             {
                 if(IsStateAnError(retState))
                 {
@@ -459,6 +463,39 @@ STATE OSCRun(HINSTR hOSC, IOSC * piosc)
             pOSC->pDMAch1->DCHxCON.CHEN = 0;
             pOSC->pDMAch2->DCHxCON.CHEN = 0;
 
+            // if the 2nd ADC is set up for logging (OC5), turn it off
+            // if(ADCTRG1bits.TRGSRC2 == 0b01010) ADCTRG1bits.TRGSRC2 = 0;
+
+            // this is only to catch the trigger setup differences from the data logger
+            // we can only run the data logger or the OSC, but not both, so we can just 
+            // configure both channels when we are running the OSC
+            if(*pjcmd.ioscCh1.pTrgSrcADC1 != pjcmd.ioscCh1.trgSrcADC1) *pjcmd.ioscCh1.pTrgSrcADC1 = pjcmd.ioscCh1.trgSrcADC1;
+            if(*pjcmd.ioscCh1.pTrgSrcADC2 != pjcmd.ioscCh1.trgSrcADC2) *pjcmd.ioscCh1.pTrgSrcADC2 = pjcmd.ioscCh1.trgSrcADC2;
+            if(*pjcmd.ioscCh2.pTrgSrcADC1 != pjcmd.ioscCh2.trgSrcADC1) *pjcmd.ioscCh2.pTrgSrcADC1 = pjcmd.ioscCh2.trgSrcADC1;
+            if(*pjcmd.ioscCh2.pTrgSrcADC2 != pjcmd.ioscCh2.trgSrcADC2) *pjcmd.ioscCh2.pTrgSrcADC2 = pjcmd.ioscCh2.trgSrcADC2;
+
+            //ADCTRG1bits.TRGSRC0 = 0b00110;      // Set trigger TMR3
+            //ADCTRG1bits.TRGSRC1 = 0b01010;      // Set trigger OC5
+            //ADCTRG1bits.TRGSRC2 = 0b00111;      // set trigger TMR5
+            //ADCTRG1bits.TRGSRC3 = 0b01000;      // Set trigger OC1
+
+            // set up the DMA pointers
+            pOSC->pDMAch1->DCHxSSA              = KVA_2_PA(piosc->pADCDATA1);
+            pOSC->pDMAch1->DCHxDSA              = KVA_2_PA(piosc->pBuff);
+            pOSC->pDMAch1->DCHxDSIZ             = AINDMASIZE;
+            pOSC->pDMAch1->DCHxCON.CHPRI        = 2;
+            pOSC->pDMAch1->DCHxECON.SIRQEN      = 1;                        // trigger on vector event
+            pOSC->pDMAch1->DCHxECON.CHSIRQ      = piosc->adcData1Vector;    // vector to trigger on
+            pOSC->pDMAch1->DCHxCON.CHAEN        = 1;
+
+            pOSC->pDMAch2->DCHxSSA              = KVA_2_PA(piosc->pADCDATA2);
+            pOSC->pDMAch2->DCHxDSA              = pOSC->pDMAch1->DCHxDSA + AINDMASIZE;
+            pOSC->pDMAch2->DCHxDSIZ             = AINDMASIZE; 
+            pOSC->pDMAch2->DCHxCON.CHPRI        = 2; 
+            pOSC->pDMAch2->DCHxECON.SIRQEN      = 1;                        // trigger on vector event
+            pOSC->pDMAch2->DCHxECON.CHSIRQ      = piosc->adcData2Vector;    // vector to trigger on
+            pOSC->pDMAch2->DCHxCON.CHAEN        = 1;
+ 
             // just to clear any ADC completion interrupts
             flushADC = *((uint32_t *) (KVA_2_KSEG1(pOSC->pDMAch1->DCHxSSA)));
             flushADC = *((uint32_t *) (KVA_2_KSEG1(pOSC->pDMAch2->DCHxSSA)));
@@ -479,7 +516,7 @@ STATE OSCRun(HINSTR hOSC, IOSC * piosc)
             // OC event on every other period. To do something close, we put RS shortly after R, not too close to cause interrupts to toggle
             // but close enough to get the transfer in the same timer cycle, so put RS at R+4. BUT then to get the timer to tirgger the first TMR ADC first
             // we must move the initial position of the timer so it fires (rolls) before the OC ADC fires, so put the TMR initial count at PRx - 4.           
-            pOSC->pTMRtrg1->TMRx        = pOSC->pTMRtrg1->PRx - 4;  // ensure the TMR triggers the first interrupt event
+            pOSC->pTMRtrg1->TMRx        = pOSC->pTMRtrg1->PRx - TMROCPULSE;  // ensure the TMR triggers the first interrupt event
 
             // all DMA pointers are set to there pre-defined buffers
             // usually the size is half the buffer as it is interleaved, however
@@ -513,7 +550,7 @@ STATE OSCRun(HINSTR hOSC, IOSC * piosc)
                 // OCxRS     0                       13     14     15           31    12  13   14     15           31       
 
                 // as noted above, put RS at R+4.
-                pOSC->pOCtrg2->OCxRS        = pOSC->pOCtrg2->OCxR + 4;    // Force us in the 300nsec zone
+                pOSC->pOCtrg2->OCxRS        = pOSC->pOCtrg2->OCxR + TMROCPULSE;    // Force us in the 300nsec zone
 
                 // CORRECTION: we are now using ADC completion events to trigger the DMA transfer and the value of RS is not
                 // used to trigger the DMA for ADC->MEM transfer. Look in instrument.c for exactly how the DMA is triggered
@@ -550,7 +587,7 @@ STATE OSCRun(HINSTR hOSC, IOSC * piosc)
  
         case OSCWaitOffset:
             // wait until the offset is set
-            if((retState = OSCSetOffset(hOSC, piosc->mvOffset)) == Idle)
+            if((retState = OSCSetOffset((HINSTR) pOSC, piosc->mvOffset)) == Idle)
             {
                 pOSC->comhdr.cNest--;
                 pOSC->comhdr.activeFunc = OSCFnRun;
@@ -587,7 +624,7 @@ STATE OSCRun(HINSTR hOSC, IOSC * piosc)
             break;
             
         case Triggered:
-            OSCVinFromDadcArray(hOSC, piosc->pBuff, AINDMASIZE);
+            OSCVinFromDadcArray((HINSTR) pOSC, piosc->pBuff, AINDMASIZE);
             pOSC->comhdr.state      = Idle;
             pOSC->comhdr.activeFunc = SMFnNone;
             break;
@@ -612,6 +649,354 @@ STATE OSCReset(HINSTR hOSC)
 
     return(Idle);
 }
+
+//**************************************************************************
+//**************************************************************************
+//*******************    Data Logger       *********************************
+//**************************************************************************
+//**************************************************************************
+
+STATE ALOGRun(IALOG * pialog)
+{
+    uint32_t volatile __attribute__((unused)) flushADC;
+    ALOG * pALOG = (ALOG *) rgInstr[pialog->id];
+    STATE retState = Idle;
+    
+    ASSERT(pialog != NULL);
+ 
+    if(!(pALOG->comhdr.activeFunc == ALogFnRun || pALOG->comhdr.activeFunc == SMFnNone))
+    {
+        return (Waiting);
+    }
+     
+    switch(pALOG->comhdr.state)
+    {
+        case Idle:
+
+            if(!OSCSetGain((HINSTR) pALOG->posc, pialog->gain))
+            {
+                pialog->stcd    = STCDError;
+                return(OSCGainOutOfRange);
+            }
+    
+            // this will return immediately if the offset PWM is already set up
+            if((retState = OSCSetOffset((HINSTR) pALOG->posc, pialog->mvOffset)) != Idle)
+            {
+                if(IsStateAnError(retState))
+                {
+                    pialog->stcd    = STCDError;
+                    return(retState);  
+                }
+
+                // wait for the offset to stabalize
+                pialog->stcd        = STCDNormal;
+                pALOG->comhdr.state = OSCWaitOffset;
+            }
+
+            // otherwise this was all set up
+            // just fall right on thru and start the setup of the Run
+            // fall thru
+
+        case OSCSetDMA:
+
+            // Turn off the sample timer
+            pALOG->pTMRdmaSampl->TxCON.ON = 0;
+
+            // turn the DMA off
+            pALOG->posc->pDMAch1->DCHxCON.CHEN = 0;
+            pALOG->posc->pDMAch2->DCHxCON.CHEN = 0;
+            IEC4CLR                            = pALOG->dmaRollIEFMask;     // clear the roll interrupt
+            IFS4CLR                            = pALOG->dmaRollIEFMask;    // clear the flag    
+
+            // the way this works is the we turn on both TM3 to trigger AN0 and OC5 to trigger AN2
+            // we run those at top speed 3.125MHz
+            // The we enable the ADC and Filter as needed
+            // on completion of the filter, DMA1 transfers to our static buffer With priority 2
+            // then on the TMR we trigger DMA2 our our sample rate, we run DMA2 at priority 1 (lower that DMA so it will stall DMA2 on collision).
+            // DMA2 transfer a stable value into our result buffer
+            // NOTE: only 1 filter can run at a time, so we must sync ADC0 and ADC2 so they do not convert at the same time, but one after the other.
+
+            if(!pALOG->pTMRadc0->TxCON.ON)
+            {
+                // make sure the OC is off
+                pALOG->pOCadc2->OCxCON.ON       = 0;
+
+                // Make sure we have the Trigger ISR placed
+                SetVector(_TIMER_9_VECTOR, TimeOutTmr9);
+
+                // set up the timer for max Logging freq
+                pALOG->pTMRadc0->TxCON.TCKPS    = 0;                                    // zero prescalar -> 1:1
+                pALOG->pTMRadc0->PRx            = INTERLEAVEPR(LOGPRx);                 // 50KS/s => 2000                
+                pALOG->pTMRadc0->TMRx           = pALOG->pTMRadc0->PRx - TMROCPULSE;    // ensure the TMR triggers the first interrupt event
+
+                // The second ADC will run at the same freq, but half way through the cycle
+                // so that both ADCs don't convert at the same time and use 2 filters at once (errata restriction)
+                pALOG->pOCadc2->OCxR            = INTERLEAVEOC(LOGPRx);                 // remember ADC trigger on R, not RS
+                pALOG->pOCadc2->OCxRS           = pALOG->pOCadc2->OCxR + TMROCPULSE;    // just long enough to cause a pulse
+
+                // set up the ADC triggers
+                // we use the OSC TMR and OC to run the 2 serialized ADC, we do NOT interleave so the interleaving ADC are not triggered.
+                if(*pjcmd.ioscCh1.pTrgSrcADC1 != pjcmd.ioscCh1.trgSrcADC1) *pjcmd.ioscCh1.pTrgSrcADC1 = pjcmd.ioscCh1.trgSrcADC1;
+                if(*pjcmd.ioscCh1.pTrgSrcADC2 != 0) *pjcmd.ioscCh1.pTrgSrcADC2 = 0;
+                if(*pjcmd.ioscCh2.pTrgSrcADC1 != pjcmd.ioscCh1.trgSrcADC2) *pjcmd.ioscCh2.pTrgSrcADC1 = pjcmd.ioscCh1.trgSrcADC2;
+                if(*pjcmd.ioscCh2.pTrgSrcADC2 != 0) *pjcmd.ioscCh2.pTrgSrcADC2 = 0;
+
+                // what the OSC configures
+                //ADCTRG1bits.TRGSRC0 = 0b00110;      // Set trigger TMR3
+                //ADCTRG1bits.TRGSRC1 = 0b01010;      // Set trigger OC5
+                //ADCTRG1bits.TRGSRC2 = 0b00111;      // set trigger TMR5
+                //ADCTRG1bits.TRGSRC3 = 0b01000;      // Set trigger OC1
+                
+                // what the data logger configures
+                //ADCTRG1bits.TRGSRC0 = 0b00110;      // Set trigger TMR3
+                //ADCTRG1bits.TRGSRC1 = 0;            // Set trigger NONE
+                //ADCTRG1bits.TRGSRC2 = 0b01010;      // Set trigger OC5
+                //ADCTRG1bits.TRGSRC3 = 0;            // Set trigger NONE
+
+                // turn on ADC conversions, both channels
+                // remeber, the ADCs are always ON, so triggering them will make them run
+                pALOG->pOCadc2->OCxCON.ON   = 1;
+                pALOG->pTMRadc0->TxCON.ON   = 1;
+            }
+            
+            // set up the timer to trigger the 2nd DMA, but DON'T Turn it on yet
+            pALOG->pTMRdmaSampl->TxCON.TCKPS    =  pialog->bidx.tmrPreScalar;
+            pALOG->pTMRdmaSampl->PRx            = PeriodToPRx(pialog->bidx.tmrPeriod);
+            pALOG->pTMRdmaSampl->TMRx           = PeriodToPRx(pialog->bidx.tmrPeriod) - TMROCPULSE;         // make the first sample fast.
+
+            // The first DMA will trigger when the ADC filter conversion is done
+            pALOG->posc->pDMAch1->DCHxSSA           = KVA_2_PA(pALOG->pFilter);         //  ADCFLTRxbits.FLTRDATA
+            pALOG->posc->pDMAch1->DCHxDSA           = KVA_2_PA(&pALOG->stableADCValue);
+            pALOG->posc->pDMAch1->DCHxDSIZ          = 2;
+            pALOG->posc->pDMAch1->DCHxCON.CHPRI     = 2;
+            pALOG->posc->pDMAch1->DCHxECON.CHSIRQ   = pALOG->fltVector;
+            pALOG->posc->pDMAch1->DCHxCON.CHAEN     = 1;                                // auto restart
+
+            // the 2nd DMA will transfer from our temp stable location to the target OSC buffer.
+            pALOG->posc->pDMAch2->DCHxSSA           = KVA_2_PA(&pALOG->stableADCValue);
+            pALOG->posc->pDMAch2->DCHxDSA           = KVA_2_PA(pialog->pBuff);    
+            pALOG->posc->pDMAch2->DCHxDSIZ          = 2*LOGDMASIZE; 
+            pALOG->posc->pDMAch2->DCHxCON.CHPRI     = 1; 
+            pALOG->posc->pDMAch2->DCHxECON.CHSIRQ   = pALOG->tmrVector;
+            pALOG->posc->pDMAch2->DCHxCON.CHAEN     = 1;   
+
+            if(pialog->bidx.tmrCnt > 1)
+            {
+                pialog->curCnt                          = pialog->bidx.tmrCnt;
+                pALOG->posc->pDMAch2->DCHxECON.SIRQEN   = 0;  // the ISR will trigger the DMA not the timer
+                pALOG->pIFSisrSample->clr               = pALOG->isrSampleIEFMask;    // clear the flag    
+                pALOG->pIECisrSample->set               = pALOG->isrSampleIEFMask;    // enable the roll interrupt
+            }
+            else
+            {
+                pALOG->posc->pDMAch2->DCHxECON.SIRQEN = 1; // let the timer trigger this directly
+                pALOG->pIFSisrSample->clr               = pALOG->isrSampleIEFMask;    // clear the flag    
+                pALOG->pIECisrSample->clr               = pALOG->isrSampleIEFMask;    // enable the roll interrupt
+            }
+
+            // clear all ints
+            pALOG->posc->pDMAch1->DCHxINTClr        = 0xFFFFFFFF;   // clear all interrupts   
+            pALOG->posc->pDMAch2->DCHxINTClr        = 0xFFFFFFFF;   // clear all interrupts      
+
+            // interrupt enabling
+            pALOG->posc->pDMAch2->DCHxINT.CHBCIE    = 1;            // say we want Channel Block Transfer Complete set
+
+             // number of rolls the DMA block transfer had
+            pialog->bidx.cTotalSamples  = 0;    // total number of samples taken
+            pialog->bidx.iDMAEnd        = 0;    // Logging: end of valid data in DMA buffer
+            pialog->bidx.iDMAStart      = 0;    // Logging: start of unsaved samples in DMA buffer
+            pialog->bidx.cDMARoll       = 0;    // Logging, this is the roll count
+            pialog->bidx.cSavedRoll     = 0;    // Logging, this is the saved roll count
+
+            // just to clear any ADC completion interrupts
+            flushADC = *pALOG->piosc->pADCDATA1;
+
+            // just to clear any Filter completion interrupts
+            flushADC = pALOG->pFilter->FLTRDATA;
+
+            // enable channel 1 DMA, during warmup we want data to be transferred to the
+            // holding memory location, but not transferred to the resultant DMA buffer location
+            pALOG->posc->pDMAch1->DCHxCON.CHEN  = 1; 
+
+            // enable the digital filter
+            // we should now be starting to transfer to the stableADCValue location
+            pALOG->pFilter->AFEN = 1;                    // Turn on the Digital filter
+
+            // set up the warm up/delay start timer
+            pALOG->pTMRdmaSampl->TxCON.ON = 1;          // turn on the sampler, the delay timer9 will turn this off
+            if(pialog->bidx.psDelay > LOGPSPRIME) TOInstrumentAdd(pialog->bidx.psDelay, pialog->id);
+            else TOInstrumentAdd(LOGPSPRIME, pialog->id);
+            TOStart();
+//            tStartL = ReadCoreTimer();
+
+            pALOG->comhdr.state      = OSCBeginRun;
+            break;
+
+        case OSCWaitOffset:
+            // wait until the offset is set
+            if((retState = OSCSetOffset((HINSTR) pALOG->posc, pialog->mvOffset)) == Idle)
+            {
+                pALOG->comhdr.state = OSCSetDMA;
+            }
+            break;
+
+        case OSCBeginRun:
+            // CORE_TMR_TICKS_PER_SEC * LOGPRx / TMRPBCLK == How many core timer ticks we have; will be the same as LOGPRx
+            // lets run 4 conversions before starting (about 80uSec)
+            if(!pALOG->pTMRdmaSampl->TxCON.ON)
+            {
+//                tStartL = (ReadCoreTimer() - tStartL) / CORE_TMR_TICKS_PER_USEC;
+
+                // Now turn on DMA2 to start transferring to the result DMA buffer
+                IFS4CLR                             = pALOG->dmaRollIEFMask;    // clear the flag    
+                IEC4SET                             = pALOG->dmaRollIEFMask;    // enable the roll interrupt
+                pALOG->posc->pDMAch2->DCHxCON.CHEN  = 1;                        // start DMA channel to, to transfer
+
+                // turn on the timer to run DMA2 to collect samples
+                pALOG->pTMRdmaSampl->TxCON.ON = 1;
+
+                // add in how long to run, -1 means never stop
+                if(pialog->maxSamples > 0)
+                {
+                    // we have LOGOVERSIZE == 64 oversize; we need to add 1 to the max samples because of specfic timing
+                    // we may be right before the stop occurs before the last sample is taken, so add 1. But at 50KHz, we will extra time
+                    // typically this will be 4 extra samples; we have up to 64 extra slop samples.
+                    TOInstrumentAdd(GetPicoSec(pialog->maxSamples+1, pialog->bidx.xsps, 1000000), pialog->id);
+                    TOStart();
+//                    tStartL = ReadCoreTimer();
+                }
+
+                if(pialog->id == ALOG2_ID)
+                {
+                    pALOG->comhdr.state      = Armed;
+                }
+                pALOG->comhdr.state      = Armed;
+            }
+            break;
+
+        case Armed:
+            if(!pALOG->pTMRdmaSampl->TxCON.ON)
+            {
+//                tStartL = (ReadCoreTimer() - tStartL) / CORE_TMR_TICKS_PER_USEC;
+                if(pialog->id == ALOG2_ID)
+                {
+                    pALOG->comhdr.state      = Armed;
+                }
+
+                // turn off the digital filter
+                pALOG->pFilter->AFEN = 0; 
+
+                // turn off the DMA channels
+                pALOG->posc->pDMAch1->DCHxCON.CHEN  = 0;
+                pALOG->posc->pDMAch2->DCHxCON.CHEN  = 0;
+
+                // clear the roll interrupt
+                IEC4CLR                             = pALOG->dmaRollIEFMask;    // enable the interrupt
+                IFS4CLR                             = pALOG->dmaRollIEFMask;    // clear the flag    
+                pALOG->pIFSisrSample->clr           = pALOG->isrSampleIEFMask;  // clear the flag    
+                pALOG->pIECisrSample->clr           = pALOG->isrSampleIEFMask;  // enable the roll interrupt
+
+                // set the DMA completion pointer
+                pialog->bidx.iDMAEnd = pALOG->posc->pDMAch2->DCHxDPTR / sizeof(uint16_t);
+
+                // go to triggered state
+                pALOG->comhdr.state      = Triggered;
+            }
+            break;
+
+        case Triggered:
+            {
+                // done
+                pALOG->comhdr.state      = Idle;
+                pALOG->comhdr.activeFunc = SMFnNone;  
+            }
+            break;
+
+        default:
+            ASSERT(NEVER_SHOULD_GET_HERE);
+            break;
+    }
+
+    return(pALOG->comhdr.state);
+}
+
+STATE ALOGStop(IALOG * pialog)
+{
+    ALOG * pALOG = (ALOG *)     rgInstr[pialog->id];
+   
+    ASSERT(pialog != NULL);
+
+    if(pALOG->comhdr.state == Armed && pALOG->pTMRdmaSampl->TxCON.ON)
+    {
+        // if it is in the timer list, clear it from the timer list
+        TONullInstrument(pialog->id);
+
+        // however we may have stated run forever and it won't be in the
+        // the timer list, so make sure to turn it off so the running will stop
+        // turn off the sampler
+        pALOG->pTMRdmaSampl->TxCON.ON = 0;
+
+        pialog->stcd          = STCDForce;
+
+        return(Idle);
+    }
+
+    return(InstrumentNotArmed);
+}
+
+
+void __attribute__((nomips16, at_vector(_DMA4_VECTOR),interrupt(IPL4SRS))) AILog1RollISR(void)
+{
+    // clear the IF flag
+    IFS4CLR     = _IFS4_DMA4IF_MASK;
+    DCH4INTCLR  = _DCH4INT_CHBCIF_MASK;
+
+    // say we rolled.
+    pjcmd.iALog1.bidx.cDMARoll++; 
+}
+
+void __attribute__((nomips16, at_vector(_DMA6_VECTOR),interrupt(IPL4SRS))) AILog2RollISR(void)
+{
+    // clear the IF flag
+    IFS4CLR = _IFS4_DMA6IF_MASK;
+    DCH6INTCLR  = _DCH6INT_CHBCIF_MASK;
+
+    // say we rolled.
+    pjcmd.iALog2.bidx.cDMARoll++; 
+}
+
+void __attribute__((nomips16, at_vector(_TIMER_5_VECTOR),interrupt(IPL5SRS))) ISRTmr5SlowLog1DMATrigger(void)
+{
+    IFS0CLR = _IFS0_T5IF_MASK;
+
+    pjcmd.iALog1.curCnt--;
+
+    if(pjcmd.iALog1.curCnt == 0)
+    {
+        // fire the cell transfer
+        DCH4ECONSET = _DCH4ECON_CFORCE_MASK;
+
+        // restart the count
+        pjcmd.iALog1.curCnt = pjcmd.iALog1.bidx.tmrCnt;
+    }
+}
+
+void __attribute__((nomips16, at_vector(_TIMER_8_VECTOR),interrupt(IPL5SRS))) ISRTmr8SlowLog1DMATrigger(void)
+{
+    IFS1CLR = _IFS1_T8IF_MASK;
+
+    pjcmd.iALog2.curCnt--;
+
+    if(pjcmd.iALog2.curCnt == 0)
+    {
+        // fire the cell transfer
+        DCH6ECONSET = _DCH6ECON_CFORCE_MASK;
+
+        // restart the count
+        pjcmd.iALog2.curCnt = pjcmd.iALog2.bidx.tmrCnt;
+    }
+}
+
 /************************************************************************/
 /*  Revision History:                                                   */
 /*                                                                      */

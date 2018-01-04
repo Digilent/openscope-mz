@@ -99,7 +99,7 @@ private:
     STATE           tokenLexState;
     PARCD           parState;
     JSONTOKEN       jsonToken;
-    uint32_t        cbToken;
+    int32_t         cbToken;
     int32_t         cZero;
     uint32_t        iAggregate;    // even object, odd array 
     int8_t          aggregate[maxAggregate]; // even object cnt, odd array cnt
@@ -107,6 +107,11 @@ private:
     uint8_t         fFractional;
     uint8_t         fExponent;
     uint8_t         fNegativeExponent;
+
+    int32_t         iInput;
+    int32_t         cbTokenBuff;
+    int32_t         iTokenBuff;
+    char            szTokenBuff[0x100];         // for tokens
 
     char const *    SkipWhite(char const * sz, uint32_t cbsz);
 
@@ -140,13 +145,17 @@ public:
         fNegativeExponent   = false;
         memset(aggregate, 0, sizeof(aggregate));
 
+        iInput = 0;
+        cbTokenBuff = 0;
+        iTokenBuff = 0;
+
         // this is so the HTTP code can move past the token
         // even when done parsing the JSON
         szMoveInput         += cbToken;
         cbToken             = 0;
     }
 
-    GCMD::ACTION LexJSON(char const * szInput, uint32_t cbInput);
+    GCMD::ACTION LexJSON(char const * szInput, int32_t cbInput, int32_t& cbConsumed);
 };
 
 #endif

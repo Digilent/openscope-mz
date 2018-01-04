@@ -52,7 +52,7 @@ size_t OSSerial::print(char ch) {
 void OSSerial::PeriodicTask(volatile void * pDMA)
 {
     volatile DMA& dma = *((DMA *) pDMA);
-
+ 
     // if any DMA is being done, don't write more out now
     if(isDMATxDone())
     {

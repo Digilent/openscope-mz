@@ -221,22 +221,22 @@ class DMASerial
             return(a < b ? a : b);
         }
 
-        uint32_t inline _KVA2PA(void * v)
+        uint32_t inline _KVA2PA(void const * v)
         {
             return(((uint32_t) (v)) & 0x1fffffff);
         }
 
-        uint32_t  inline _KVA2KSEG0(void * v)
+        uint32_t  inline _KVA2KSEG0(void const * v)
         {
             return(_KVA2PA(v) | 0x80000000);
         }
 
-        uint32_t inline _KVA2KSEG1(void * v)
+        uint32_t inline _KVA2KSEG1(void const * v)
         {
             return(((uint32_t) (v)) | 0xA0000000);
         }
 
-        bool inline _KVA_IS_RAM(void * v)
+        bool inline _KVA_IS_RAM(void const * v)
         {
             return((((uint32_t) (v)) & 0x10000000) == 0);
         }
@@ -304,7 +304,7 @@ class DMASerial
         }
 
         // DMA block write methodes
-        int             writeBuffer(uint8_t * pBuf, uint32_t cbBuf, volatile void * pDMA);
+        int             writeBuffer(uint8_t const * pBuf, uint32_t cbBuf, volatile void * const pDMA);
         int inline      isDMATxDone(void)
         {
             return(pdmaTx == NULL || !pdmaTx->con.CHEN);

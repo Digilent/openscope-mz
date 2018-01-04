@@ -15,9 +15,9 @@
 
 STATE LEDTask(void)
 {   
-    static  uint32_t    tSLoop          = ReadCoreTimer();
-    static  uint32_t    cAve            = 0;
-    static  uint32_t    tLed            = SYSGetMilliSecond();;
+    static  uint32_t    tBtn            = 0;
+    static  bool        fBtn            = false;
+    static  uint32_t    tLed            = SYSGetMilliSecond();
     static  uint32_t    ip1             = 0;
     static  uint32_t    ip2             = 0;
     static  uint32_t    ip3             = 0;
@@ -26,32 +26,59 @@ STATE LEDTask(void)
     static  bool        fBlockIOBusL    = false;
     static  bool        fNoLEDs         = false;
             bool        fBlink          = false;
-            uint32_t    tELoop          = ReadCoreTimer(); // need this as we need tLoop to be 32 bits unsigned, tAve is 64 bits
-            uint32_t    tLoop           = tELoop - tSLoop; // need this as we need tLoop to be 32 bits unsigned, tAve is 64 bits
-            uint64_t    tAve            = cAve * ((uint64_t) aveLoopTime) + tLoop;
+            bool        fStopBlink      =   pjcmd.trigger.state.processing == Run || pjcmd.trigger.state.processing == Armed || 
+                                            pjcmd.iCal.state.processing == JSPARCalibrationStart || 
+                                            pjcmd.iALog1.state.processing == Running || pjcmd.iALog2.state.processing == Running;
 
-    // this is loop time
-    cAve++;
-    aveLoopTime = (uint32_t) ((tAve + cAve/2) / cAve);
-    if(cAve >= 1000) cAve = 999;
-    tSLoop = tELoop;
- 
-    if((pjcmd.trigger.state.processing == Run || pjcmd.trigger.state.processing == Armed || pjcmd.iCal.state.processing == JSPARCalibrationStart) != fNoLEDs)
+    /* ------------------------------------------------------------ */
+    /*					Button Processing        					*/
+    /* ------------------------------------------------------------ */
+
+    // someone hit the button
+    if(!fBtn && GetGPIO(PIN_BTN1))
     {
-        fNoLEDs = (pjcmd.trigger.state.processing == Run || pjcmd.trigger.state.processing == Armed || pjcmd.iCal.state.processing == JSPARCalibrationStart);
+        // stop logging if we are logging
+        if(pjcmd.iALog1.state.processing == Running) ALOGStop(&pjcmd.iALog1);
+        if(pjcmd.iALog2.state.processing == Running) ALOGStop(&pjcmd.iALog2);
+
+        tBtn = SYSGetMilliSecond();
+        fBtn = true;
+    }
+
+    // debounce, if the button is pressed, refresh the timer
+    else if(fBtn && GetGPIO(PIN_BTN1))
+    {
+        tBtn = SYSGetMilliSecond();
+    }
+
+    // if the timer expired
+    else if(fBtn && (SYSGetMilliSecond() - tBtn) > 500)
+    {
+        fBtn = false;
+    }
+            
+    /* ------------------------------------------------------------ */
+    /*					LED Processing           					*/
+    /* ------------------------------------------------------------ */
+
+    if(fStopBlink != fNoLEDs)
+    {
+        fNoLEDs = fStopBlink;
 
         if(fNoLEDs)
         {
             SetGPIO(PIN_LED_1, 1);                  
-            SetGPIO(PIN_LED_2, 0);
-            SetGPIO(PIN_LED_3, 0);
-            SetGPIO(PIN_LED_4, 0);    
         }
         else
         {
+            SetGPIO(PIN_LED_1, 0);                  
             tLed    = SYSGetMilliSecond();
             fBlink  = false;
         }
+
+        SetGPIO(PIN_LED_2, 0);
+        SetGPIO(PIN_LED_3, 0);
+        SetGPIO(PIN_LED_4, 0);    
     }
 
     if(fNoLEDs)

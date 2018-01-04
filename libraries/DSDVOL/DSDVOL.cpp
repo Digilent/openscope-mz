@@ -11,7 +11,7 @@
 / http://elm-chan.org/docs/mmc/mmc_e.html
 /-------------------------------------------------------------------------/
 /
-/ 10/21/2015 Modified by Keith Vogel; Digilent Inc., for use with chipKIT
+/ 10/5/2017 Modified by Keith Vogel; Digilent Inc., for use with OpenScope
 / 
 /-------------------------------------------------------------------------*/
 #include "DSDVOL.h"
@@ -52,10 +52,20 @@ int DSDVOL::wait_ready (void)
 	BYTE d;
 
 	tmsSetTimer(2) = 500;	/* Wait for ready in timeout of 500ms */
+    
+    tBusyStart = _ReadCoreTimer();
 	do {
 		d = xchg_spi(0xFF);
 	} while ((d != 0xFF) && tmsTimer(2));
-
+    MAXTIME(tBusyStart, tBusyMax);          // recording the maximum busy time
+    
+    // how many long busies do we get in a row
+    // assume a long busy is 10ms or more
+    if(tBusyStart > 10000) cBusyInARow++;
+    else cBusyInARow = 0;
+ 
+    if(cBusyInARow > maxBusyInARow) maxBusyInARow = cBusyInARow;
+    
 	return (d == 0xFF) ? 1 : 0;
 }
 
@@ -321,7 +331,7 @@ DRESULT DSDVOL::disk_read(
 		}
 	}
 	deselect();
-
+    
 	return count ? RES_ERROR : RES_OK;
 }
 

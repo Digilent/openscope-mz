@@ -23,6 +23,10 @@
 class OSPAR : public JSON
 {
 public:
+
+    typedef GCMD::ACTION (OSPAR::* FNWRITEDATA)(char const pchWrite[], int32_t cbWrite, int32_t& cWritten);
+    typedef GCMD::ACTION (OSPAR::* FNREADDATA)(int32_t iOData, uint8_t const *& pbRead, int32_t& cbRead);
+
     typedef struct _STRU32
     {
         char const * const  szToken;
@@ -31,10 +35,21 @@ public:
 
     typedef struct _ODATA
     {
+        INSTR_ID    id;
         STATE *     pLockState;
-        int32_t     cb;
+        FNREADDATA  ReadData;
+        uint32_t    iOut;
+        uint32_t    cb;
         uint8_t  *  pbOut;
     } ODATA;
+
+    typedef struct _IDATA
+    {
+        STATE *     pLockState;
+        FNWRITEDATA WriteData;       
+        int32_t     cb;
+        uint32_t    iBinary;
+    } IDATA;
 
     typedef enum
     {
@@ -43,7 +58,19 @@ public:
         OSJB
     } OSCMD;
 
+    typedef enum
+    {
+        ICDNone,
+        ICDStart,
+        ICDEnd
+    } ICD;
+
 private:
+    STATE           stateOSJB;
+    STATE           stateOSJBNextWhite;
+    STATE           stateOSJBNextNewLine;
+    STATE           stateOSJBNextChunk;
+
     STATE           state;
     STATE           stateNameSep;
     STATE           stateArray;
@@ -53,62 +80,132 @@ private:
     STATE           stateOutLock;
     STRU32 const *  rgStrU32;
     uint32_t        cStrU32;
-    uint32_t        cbProcessed;
-    uint32_t        iStream;
-    uint32_t        iBuf;
-    uint32_t        iBufMax;
-    char            szBuf[0x100];
-    char            rgchOut[0x4000]; // 16384 bytes
+
+    bool            fError;
+    bool            fDoneReadingJSON;
+    bool            fWrite;
+
+    uint32_t        tStartCmd;
+    uint32_t        tLastCmd;
+
+    int32_t         cbStreamInception;
+    int32_t         iStream;
+    int32_t         cbConsumed;
+
+    int32_t         iBinaryDone;
+    int32_t         iBinary;
+    FNWRITEDATA     WriteData; 
+
+    int32_t         cbChunk;
+    int32_t         iChunkStart;
+    int32_t         iChunk;
+
+    int32_t         iOSJBCount;
+    char            szOSJBCount[128];
+
+    char            pchJSONRespBuff[0x4000];    // 16384 bytes for output OSJB
 
     // JSON callback routine; Must be supplied
     STATE ParseToken(char const * szToken, uint32_t cbToken, JSONTOKEN jsonToken); 
 
     uint32_t Uint32FromStr(STRU32 const * const rgStrU32L, uint32_t cStrU32L, char const * const sz, uint32_t cb, STATE defaultState=OSPARSyntaxError);
-
-    friend STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn);
-
+    GCMD::ACTION ReadJSONResp(int32_t iOData, uint8_t const *& pbRead, int32_t& cbRead);
+    GCMD::ACTION ReadFile(int32_t iOData, uint8_t const *& pbRead, int32_t& cbRead);
+    GCMD::ACTION ReadLogFile(int32_t iOData, uint8_t const *& pbRead, int32_t& cbRead);
+ 
 public:
     bool            fLocked;
-    uint32_t        cOData;
+    int32_t         iOData;
+    int32_t         cOData;
+    int32_t         cIData;
     ODATA           odata[4];
+    IDATA           idata[4];
 
-    OSPAR()
+    uint8_t const * pbOutput;
+    int32_t         cbOutput;
+
+    OSPAR() : tStartCmd(0), tLastCmd(0)
     {
-        Init();
+        Init(ICDNone);
     }
 
-    void Init(void)
+    void Init(ICD icd)
     {
         JSON::Init();    
-        state           = Idle;
-        stateNameSep    = OSPARSyntaxError;
-        stateArray      = OSPARSyntaxError;
-        stateValueSep   = OSPARSyntaxError;
-        stateEndArray   = OSPARSyntaxError;
-        stateEndObject  = OSPARSyntaxError;
-        rgStrU32        = NULL;
-        cStrU32         = 0;
-        cbProcessed     = 0;
-        iStream         = 0;
-        iBuf            = 0;
-        iBufMax         = 0;
-        fLocked         = false;
-        cOData          = 1;
-        stateOutLock    = LOCKAvailable;
-        odata[0].pbOut  = (uint8_t *) rgchOut;
-        odata[0].cb     = 0;
-        odata[0].pLockState      = &stateOutLock;
+        stateOSJB           = Idle;
+        stateOSJBNextWhite  = Idle;
+        stateOSJBNextChunk  = Idle;
+        stateOSJBNextNewLine = Idle;
+
+        state               = Idle;
+        stateNameSep        = OSPARSyntaxError;
+        stateArray          = OSPARSyntaxError;
+        stateValueSep       = OSPARSyntaxError;
+        stateEndArray       = OSPARSyntaxError;
+        stateEndObject      = OSPARSyntaxError;
+        rgStrU32            = NULL;
+        cStrU32             = 0;
+
+        fError              = false;
+        fWrite              = false;
+
+        cbStreamInception   = 0;
+        iStream             = 0;
+        cbConsumed          = 0;
+
+        iBinary             = 0;
+        iBinaryDone         = 0;
+        WriteData           = NULL;
+
+        cbChunk             = 0;
+        iChunkStart         = 0;
+        iChunk              = 0;
+        iOSJBCount          = 0;
+
+        fLocked             = false;
+        iOData              = 0;
+        cOData              = 1;
+        cIData              = 0;
+
+        pbOutput            = NULL;
+        cbOutput            = 0;
+
+        memset(idata, 0, sizeof(idata));
+        memset(odata, 0, sizeof(odata));
+
+        stateOutLock        = LOCKAvailable;
+        odata[0].id         = NULL_ID;
+        odata[0].pbOut      = (uint8_t *) pchJSONRespBuff;
+        odata[0].cb         = 0;
+        odata[0].pLockState = &stateOutLock;
+        odata[0].ReadData   = &OSPAR::ReadJSONResp;
+
+        switch(icd)
+        {
+            case ICDStart:
+                tStartCmd = ReadCoreTimer();
+                break;
+
+            case ICDEnd:
+                tLastCmd = (ReadCoreTimer() - tStartCmd) / CORE_TMR_TICKS_PER_USEC;
+                break;
+
+            default:
+            case ICDNone:
+                break;
+        }
     }
 
     OSCMD IsOSCmdStart(char ch)
     {
         if(ch == '{') return(OSPAR::JSON);
-        else if('1' <= ch && ch <= '9') return(OSPAR::OSJB);
+        else if(('0' <= ch && ch <= '9') || ('a' <= ch && ch <= 'f') || ('A' <= ch && ch <= 'F')) return(OSPAR::OSJB);
 
         return(OSPAR::NONE);
     }
 
-    GCMD::ACTION StreamJSON(char const * szStream, uint32_t cbStream);
+    GCMD::ACTION StreamOS(char const * szStream, int32_t cbStream);
+    GCMD::ACTION WriteOSJBFile(char const pchWrite[], int32_t cbWrite, int32_t& cbWritten);
 };
 #endif // c++
 #endif

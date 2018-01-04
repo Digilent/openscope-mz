@@ -109,6 +109,7 @@ bool OSMult(int8_t m1[], uint32_t cm1, int8_t m2[], uint32_t cm2, int8_t r[], ui
     return(true);
 }
 
+// WARNING, the largest dl can be is 2^^56!! => 72,057,594,037,927,936
 bool OSDivide(int8_t m1[], uint32_t cm1, int64_t d1, int8_t r[], uint32_t cr)
 {
     bool negative = false;
@@ -127,7 +128,7 @@ bool OSDivide(int8_t m1[], uint32_t cm1, int64_t d1, int8_t r[], uint32_t cr)
     {
         int64_t r1 = 0;
 
-        // make negative is a negative value
+        // sign extend if negative
         if(m1[cm1-1] < 0) memset(&r1, 0xFF, sizeof(r1));
 
         // put in r1 and divide as int64
@@ -135,7 +136,7 @@ bool OSDivide(int8_t m1[], uint32_t cm1, int64_t d1, int8_t r[], uint32_t cr)
         r1 /= d1;
            
         // return the result
-        // if r1 is negative set to negative
+        // if r1 is sign extend
         if(r1 < 0) memset(r, 0xFF, cr);
 
         // now put in the result
@@ -226,18 +227,19 @@ char * illtoa(int64_t val, char * buf, uint32_t base)
 	return cp;
 }
 
-int64_t GetSamples(int64_t psec, int64_t msps)
+int64_t GetSamples(int64_t psec, int64_t xsps, uint32_t scaleSPS)
 {
-    int32_t np = 1; 
-    uint8_t r[2*sizeof(uint64_t)];
-    int64_t samp = 0;
-    uint64_t half = 500000000000000ull;
+    int32_t     np      = 1; 
+    int64_t     samp    = 0;
+    uint64_t    half    = 500000000000ull;
+    uint8_t     r[2*sizeof(uint64_t)];
+    uint8_t     r2[2*sizeof(uint64_t)];
 
     // The math.
     // samples = samples/sec * sec
-    // samples = mSamples/sec * psec * Sample/1000mSamples * sec/1000000000000psec
-    // samples = mSamples/sec * psec / 1000000000000000
-    // with averaging: samples = (mSamples/sec * psec + 1000000000000000/2) / 1000000000000000
+    // samples = (xSamples/sec) * (Samples/xSamples)  * psec * (sec/1000000000000psec)
+    // samples = (xsps / scaleSPS) * (psec / 1000000000000)
+    // samples = (xsps * psec) / (scaleSPS * 1000000000000)
 
     // want to do positive math, for rounding
     if(psec < 0) 
@@ -246,36 +248,45 @@ int64_t GetSamples(int64_t psec, int64_t msps)
         np = -1;
     }
 
-    // mSamples/sec * psec
-    OSUMult((uint8_t *) &psec, sizeof(psec), (uint8_t *) &msps, sizeof(msps), r, sizeof(r));
+    // xSamples/sec * psec
+    OSUMult((uint8_t *) &psec, sizeof(psec), (uint8_t *) &xsps, sizeof(xsps), r, sizeof(r));
 
-    // (mSamples/sec * psec + 1000000000000000/2)
-    OSAdd(r, sizeof(r), (uint8_t *) &half, sizeof(half), r, sizeof(r));
+    // Division is hard because we will exceed our maximum of 2^^56, so we do it in 2 part
+    // the first part is the smaller divisor so we get the biggest quotient. That we do can skip averaging
+    // normally scaleSPS is 1000, sometimes 1000000, but 1000000000000 >> 1000000, so we don't have to round the first
+    // divide because the second one will swamp it. We may be slightly off on rounding around the 50% mark, but close enough
 
-    // (mSamples/sec * psec + 1000000000000000/2) / 1000000000000000
-    OSDivide((int8_t *) r, sizeof(r), 1000000000000000ll, (int8_t *) &samp, sizeof(samp));
+    // (mSamples/sec * psec) / scaleSPS
+    OSDivide((int8_t *) r, sizeof(r), scaleSPS, (int8_t *) r2, sizeof(r2));
+
+    // add for rounding
+    // ((mSamples/sec * psec) / scaleSPS) + ps/2        // for averaging
+    OSAdd(r2, sizeof(r2), (uint8_t *) &half, sizeof(half), r2, sizeof(r2)); 
+
+    // ps = 10^^12 = 1000000000000ull
+    // (((mSamples/sec * psec) / scaleSPS) + ps/2) / ps        
+    OSDivide((int8_t *) r2, sizeof(r2), 1000000000000ull, (int8_t *) &samp, sizeof(samp));
 
     // get our sign correct
     samp *= np;
-//    if(np == -1)
-//        OSMakeNeg((uint8_t *) &samp1, sizeof(samp1));
     
     return(samp);
 }
 
-int64_t GetPicoSec(int64_t samp, int64_t msps)
+// max xsps = 1,000,000 ==  59.8 bits (still fits in int64_t)
+// pratically we can go to uSPS or 1,000,000
+int64_t GetPicoSec(int64_t samp, int64_t xsps, uint32_t scaleSPS)
 {
     int32_t np = 1;
     uint8_t r[2*sizeof(uint64_t)];
     int64_t psec = 0;
-    uint64_t tenTo15 = 1000000000000000ull;
-    uint64_t half = (uint64_t) (msps/2);
+    uint64_t psScaleSPS = 1000000000000ull * scaleSPS;
+    uint64_t half = (uint64_t) (xsps/2);
 
     // The math.
     // sec = samples / (samples / sec)
-    // psec/10^^12 = samples /(mSample/(10^^3 sec))
-    // psec = (10^^12 samples) 10^^3 / (mSample/sec)
-    // psec = 10^^15 * samples / (mSamples/sec)
+    // psec = 10^^12 * samples / (samples / sec)
+    // psec = (10^^12 * scaleSPS) * samples / ((scaleSPS * samples) / sec)
 
     // go positive
     if(samp < 0)
@@ -284,16 +295,88 @@ int64_t GetPicoSec(int64_t samp, int64_t msps)
         np = -1;
     }
 
-    OSUMult((uint8_t *) &samp, sizeof(samp), (uint8_t *) &tenTo15, sizeof(tenTo15), r, sizeof(r));
+    OSUMult((uint8_t *) &samp, sizeof(samp), (uint8_t *) &psScaleSPS, sizeof(psScaleSPS), r, sizeof(r));
     OSAdd(r, sizeof(r), (uint8_t *) &half, sizeof(half), r, sizeof(r));
-    OSDivide((int8_t *) r, sizeof(r), msps, (int8_t *) &psec, sizeof(psec));
+    OSDivide((int8_t *) r, sizeof(r), xsps, (int8_t *) &psec, sizeof(psec));
 
     // get our sign back
     psec *= np;
-//    if(np == -1) psec *= -1;
-//        OSMakeNeg((uint8_t *) &psec, sizeof(psec));
 
     return(psec);
+}
+
+// returns actual mSPS
+uint64_t CalculatePreScalarAndPeriod(uint64_t xsps, uint32_t scaleSPS, uint32_t const pbClk, uint16_t * pPreScalar, uint32_t * pPeriod, uint32_t * pCnt)
+{
+    uint64_t pbXScale   = pbClk * ((uint64_t) scaleSPS);
+    uint64_t tmr        = (pbXScale + (xsps/2)) / xsps;
+    uint16_t preScalar  = 0;
+    uint32_t preDivide  = 1;
+    uint32_t cnt        = 1;
+
+    // if we are too slow to use just the timer, also add outside counts
+    // set prescalar to 256
+    if(xsps < (TMRMINSPS * scaleSPS))
+    {
+        ASSERT(pCnt != NULL);
+
+        tmr = (tmr + 128) / 256;
+        cnt = tmr / MAXTMRPRX;
+
+        if((tmr % MAXTMRPRX) > 0) cnt++;
+        if(cnt == 0) cnt = 1;
+        tmr = (tmr + cnt/2) / cnt;
+
+        preScalar = 7;                  // divide by 256
+        preDivide = 256;
+    }
+
+    else
+    {
+        for(preScalar=0; preScalar<9; preScalar++)
+        {
+            uint64_t tmrT = (tmr + (preDivide / 2)) / preDivide;
+
+            if(tmrT <= MAXTMRPRX)     // we wil always substract 1 before putting in the PRx register
+            {
+                // we are done
+                tmr = tmrT;
+                break;
+            }
+
+            // go to next preScalar
+            preDivide *= 2;
+        }
+
+        // there is no 8, but we are with a preDivide of 256
+        if(preScalar == 8)
+        {
+            preScalar = 7;
+        }
+
+        // there is no preDivide of 128, so bump up to 256
+        else if(preScalar == 7)
+        {
+            tmr = (tmr + 1) / 2;
+            preDivide *= 2;
+        }
+
+        // error condition
+        if(tmr == 0 || preScalar == 9)
+        {
+            pbXScale    = 0;        // cause return value to be zero
+            tmr         = 1;        // we can not divide by zero
+            preScalar   = 0;
+        }
+    }
+
+    if(pPeriod != NULL)     *pPeriod    = ((uint32_t) tmr);
+    if(pPreScalar != NULL)  *pPreScalar =  preScalar;
+    if(pCnt != NULL)        *pCnt       = cnt;
+
+    // pbXScale == 100,000,000 * scale which 1,2,4,8,16,32,64,256 all divide evenly into
+    // so we only need to round the cnt and tmr values
+    return(((pbXScale / preDivide) + (cnt*tmr/2)) / (cnt*tmr));
 }
 
 bool ScrollBuffer(uint16_t rgBuff[], int32_t cBuff, int32_t iNew, int32_t iCur)
@@ -301,10 +384,16 @@ bool ScrollBuffer(uint16_t rgBuff[], int32_t cBuff, int32_t iNew, int32_t iCur)
     int32_t iStart = (iCur - iNew + cBuff) % cBuff;      // we want to do modulo math to keep us in the index range of the buffer
     int16_t rgHoldBuff[cBuff/2];                                // a scratch buffer
 
-    // we have to have a mult of 2 for the buffer size
+                                                                // we have to have a mult of 2 for the buffer size
     ASSERT((cBuff % 2) == 0);
 
-    if(iStart >= cBuff/2)
+    // nothing to do, return.
+    if(iNew == iCur)
+    {
+        return(true);
+    }
+
+    else if(iStart >= cBuff/2)
     {
         memcpy(rgHoldBuff, rgBuff, sizeof(rgHoldBuff));
         memcpy(rgBuff, &rgBuff[cBuff/2], sizeof(rgHoldBuff));
@@ -319,85 +408,33 @@ bool ScrollBuffer(uint16_t rgBuff[], int32_t cBuff, int32_t iNew, int32_t iCur)
     return(true);
 }
 
-// returns actual mSPS
-static uint64_t CalculatePreScalarAndPeriod(uint64_t msps, uint32_t const pbClk, uint16_t * pPreScalar, uint16_t * pPeriod)
-{
-    uint64_t pbX1000    = pbClk * 1000ull;
-    uint64_t tmr        = (pbX1000 + (msps/2)) / msps;
-    uint16_t preScalar  = 0;
-    uint32_t preDivide  = 1;
-
-    for(preScalar=0; preScalar<9; preScalar++)
-    {
-        uint64_t tmrT = (tmr + (preDivide / 2)) / preDivide;
-
-        if(tmrT <= 0xFFFF)
-        {
-            // we are done
-            tmr = tmrT;
-            break;
-        }
-
-        // go to next preScalar
-        preDivide *= 2;
-    }
-
-    // there is no 8, but we are with a preDivide of 256
-    if(preScalar == 8)
-    {
-        preScalar = 7;
-    }
-
-    // there is no preDivide of 128, so bump up to 256
-    else if(preScalar == 7)
-    {
-        tmr = (tmr + 1) / 2;
-        preDivide *= 2;
-    }
-
-    // error condition
-    if(tmr == 0 || preScalar == 9)
-    {
-        pbX1000     = 0;        // cause return value to be zero
-        tmr         = 1;        // we can not divide by zero
-        preScalar   = 0;
-    }
-
-    if(pPeriod != NULL)     *pPeriod = ((uint16_t) tmr);
-    if(pPreScalar != NULL)  *pPreScalar =  preScalar;
-
-    // pbX1000 == 100,000,000,000 which 1,2,4,8,16,32,64,256 all divide evenly into
-    // so we only need to round the tmr value
-    return(((pbX1000 / preDivide) + tmr/2) / tmr);
-}
-
 bool CalculateBufferIndexes(BIDX * pbidx)
 {
     int64_t absTrig2POI;
 
     // see if we are going to interleave
-    pbidx->fInterleave = (pbidx->msps >= pbidx->mHzInterleave);
+    pbidx->fInterleave = (pbidx->xsps >= pbidx->mHzInterleave);
 
     // calculate the actual msps and prescalar and period
     if(pbidx->fInterleave)
     {
-        pbidx->msps = 2 * CalculatePreScalarAndPeriod((pbidx->msps + 1)/2, pbidx->pbClkSampTmr, &pbidx->tmrPreScalar, &pbidx->tmrPeriod);
+        pbidx->xsps = 2 * CalculatePreScalarAndPeriod((pbidx->xsps + 1)/2, 1000, pbidx->pbClkSampTmr, &pbidx->tmrPreScalar, &pbidx->tmrPeriod, &pbidx->tmrCnt);
     }
     else
     {
-        pbidx->msps = CalculatePreScalarAndPeriod(pbidx->msps, pbidx->pbClkSampTmr, &pbidx->tmrPreScalar, &pbidx->tmrPeriod);
+        pbidx->xsps = CalculatePreScalarAndPeriod(pbidx->xsps, 1000, pbidx->pbClkSampTmr, &pbidx->tmrPreScalar, &pbidx->tmrPeriod, &pbidx->tmrCnt);
     }
 
-    if(pbidx->msps == 0)
+    if(pbidx->xsps == 0)
     {
         return(false);
     }
 
     // calculate the number of samples delay from Trig to POI
-    pbidx->dlTrig2POI = GetSamples(pbidx->psDelay, pbidx->msps);
+    pbidx->dlTrig2POI = GetSamples(pbidx->psDelay, pbidx->xsps, 1000);
 
     // calculate the actual delay in picoseconds
-    pbidx->psDelay = GetPicoSec(pbidx->dlTrig2POI, pbidx->msps);
+    pbidx->psDelay = GetPicoSec(pbidx->dlTrig2POI, pbidx->xsps, 1000);
 
     absTrig2POI = pbidx->dlTrig2POI < 0 ? -pbidx->dlTrig2POI : pbidx->dlTrig2POI;
 
@@ -464,7 +501,7 @@ bool CalculateBufferIndexes(BIDX * pbidx)
     pbidx->cBeforeTrig = pbidx->iTrg + pbidx->cDMASlop/2;
 
     // we can't go negative on timer ticks
-    pbidx->cDelayTmr = GetSamples(pbidx->psDelay, TMRPBCLK*1000ll) + GetSamples(GetPicoSec(((pbidx->cBuff - pbidx->iPOI) + pbidx->cDMASlop/2), pbidx->msps), TMRPBCLK*1000ll);
+    pbidx->cDelayTmr = GetSamples(pbidx->psDelay, TMRPBCLK*1000ll, 1000) + GetSamples(GetPicoSec(((pbidx->cBuff - pbidx->iPOI) + pbidx->cDMASlop/2), pbidx->xsps, 1000), TMRPBCLK*1000ll, 1000);
     if(pbidx->cDelayTmr <= 0) pbidx->cDelayTmr = 1;
 
     return(true);

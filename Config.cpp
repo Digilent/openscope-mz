@@ -345,7 +345,7 @@ STATE CFGSaveCalibration(INSTRGRP& instrGrp, VOLTYPE const vol, CFGNAME const cf
            break;
             
         case CFGCalSave:
-            if((retState = IOWriteFile(instrGrp.dFile, vol, sz, *((IDHDR *) instrGrp.rghInstr[instrGrp.iInstr]))) == Idle)
+            if((retState = IOWriteFile(dGFile, vol, sz, *((IDHDR *) instrGrp.rghInstr[instrGrp.iInstr]))) == Idle)
             {
                 instrGrp.state = CFGCalSaveNext;
             }
@@ -626,7 +626,7 @@ STATE CFGReadCalibrationInfo(INSTRGRP& instrGrp, VOLTYPE const vol, CFGNAME cons
 
         case CFGCalRead:
             // need to be very careful not to overwrite the orignal if it is the wrong data on the file
-            if((retState = IOReadFile(instrGrp.dFile, vol, sz, *pidhdr)) == Idle)
+            if((retState = IOReadFile(dGFile, vol, sz, *pidhdr)) == Idle)
             {                
                 // make sure we have the correct calibration version.
                 if((pidhdr->ver != CALVER))

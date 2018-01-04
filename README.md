@@ -15,8 +15,10 @@ Precompiled binaries available [here](https://reference.digilentinc.com/referenc
 ### Building from source
 1. Install Arduino **1.6.9** IDE.  
   * (Other versions of the Arduino IDE have not been tested and may not work).
-2. Install the Digilent Core for Arduino as described [here](https://reference.digilentinc.com/learn/software/tutorials/digilent-core-install/start)
-3. Clone this repository.
+2. Install the Digilent Core for Arduino as described [here](https://reference.digilentinc.com/learn/software/tutorials/digilent-core-install/start).
+3. Clone this repository into a folder named 'OpenScope' (the foldername must match for the .ino to open correctly).
+  * <code>git clone https://github.com/Digilent/openscope-mz.git OpenScope</code>
+4. Copy the supporting libraries from OpenScope/libraries into the Arduion libraries folder (See **File>>Preferences>>Sketchook locaion** in Arduino IDE).
 4. Open OpenScope.ino in the Arduino IDE.
 5. Connect the OpenScope MZ to the computer via USB.
 5. Click **Tools>>Board>>OpenScope**.

@@ -29,6 +29,7 @@ STATE ResetInstruments(void)
     //**************************************************************************
     //*******************  TMR 9 Abort Trigger  ********************************
     //**************************************************************************
+    IEC1CLR             = _IEC1_ADCDF1IE_MASK;
     TRGAbort();
     memcpy(&pjcmd.trigger, &pjcmdT.trigger, sizeof(pjcmd.trigger));
 
@@ -49,6 +50,27 @@ STATE ResetInstruments(void)
     //**************************************************************************
     OC4RS               = PWMIDEALCENTER;          // set to midpoint
     memcpy(&pjcmd.idcCh2, &pjcmdT.idcCh2, sizeof(pjcmd.idcCh2));
+
+    //**************************************************************************
+    //*******************  Analog Log 1  ***************************************
+    //**************************************************************************
+    IEC1CLR             = _IEC1_ADCDF2IE_MASK;
+    IEC4CLR             = _IEC4_DMA4IE_MASK;
+    IEC0CLR             = _IEC0_T5IE_MASK;
+    memcpy(&pjcmd.iALog1, &pjcmdT.iALog1, sizeof(pjcmd.iALog1));
+ 
+    //**************************************************************************
+    //*******************  Analog Log 2  ***************************************
+    //**************************************************************************
+    IEC1CLR             = _IEC1_ADCDF3IE_MASK;
+    IEC4CLR             = _IEC4_DMA6IE_MASK;
+    IEC1CLR             = _IEC1_T8IE_MASK;
+    memcpy(&pjcmd.iALog2, &pjcmdT.iALog2, sizeof(pjcmd.iALog2));
+
+    //**************************************************************************
+    //*******************  Digilal Log 1  **************************************
+    //**************************************************************************
+    memcpy(&pjcmd.iDLog1, &pjcmdT.iDLog1, sizeof(pjcmd.iDLog1));
 
     //**************************************************************************
     //*******************  AWG/DAC PWM7  ***************************************
@@ -78,6 +100,7 @@ STATE ResetInstruments(void)
     OC8RS               = PWMIDEALCENTER;       // ADC offset   
     OC5R                = INTERLEAVEOC(32);     // interleave OC   
     memcpy(&pjcmd.ioscCh1, &pjcmdT.ioscCh1, sizeof(pjcmd.ioscCh1));
+    IEC4bits.DMA4IE     = 0;                    // clear DMA interrupts 
 
     //**************************************************************************
     //**************************************************************************
@@ -92,6 +115,7 @@ STATE ResetInstruments(void)
     OC9RS               = PWMIDEALCENTER;   // ADC offset         
     OC1R                = INTERLEAVEOC(32); // interleave OC    
     memcpy(&pjcmd.ioscCh2, &pjcmdT.ioscCh2, sizeof(pjcmd.ioscCh2));
+    IEC4bits.DMA6IE     = 0;                    // clear DMA interrupts 
 
     return(Idle);
 }
@@ -778,24 +802,79 @@ STATE InitInstruments(void)
     DCH6ECONbits.AIRQEN = 0;                    // abort trigger disable    
     IEC4bits.DMA6IE     = 0;                    // clear DMA interrupts 
     IFS4bits.DMA6IF     = 0;                    // clear DMA interrupt flag
-   
+ 
+    //**************************************************************************
+    //**************************************************************************
+    //*******************  Data Logger  ****************************************
+    //**************************************************************************
+    //**************************************************************************
+    IFS1CLR             = _IFS1_ADCDF1IF_MASK;
+    IEC1CLR             = _IEC1_ADCDF1IE_MASK;
+    IFS1CLR             = _IFS1_ADCDF2IF_MASK;
+    IEC1CLR             = _IEC1_ADCDF2IE_MASK;
+    IFS1CLR             = _IFS1_ADCDF3IF_MASK;
+    IEC1CLR             = _IEC1_ADCDF3IE_MASK;
+    IFS4CLR             = _IFS4_DMA4IF_MASK;
+    IEC4CLR             = _IEC4_DMA4IE_MASK;
+    IFS4CLR             = _IFS4_DMA6IF_MASK;
+    IEC4CLR             = _IEC4_DMA6IE_MASK;
+    IFS0CLR             = _IFS0_T5IF_MASK;
+    IEC0CLR             = _IEC0_T5IE_MASK;
+    IFS1CLR             = _IFS1_T8IF_MASK;
+    IEC1CLR             = _IEC1_T8IE_MASK;
+
+    ADCFLTR2            = 0;
+    ADCFLTR3            = 0;
+
+    ADCFLTR2bits.DFMODE = 1;                        // put in averaging mode
+    ADCFLTR2bits.OVRSAM = 0b01;                     // 4 samples       
+    ADCFLTR2bits.CHNLID = 0;                        // the channel number
+    ADCFLTR2bits.AFGIEN = 1;                        // Enable the interrupt (set the IF flag)
+
+    ADCFLTR3bits.DFMODE = 1;                        // put in averaging mode
+    ADCFLTR3bits.OVRSAM = 0b01;                     // 4 samples       
+    ADCFLTR3bits.CHNLID = 2;                        // the channel number
+    ADCFLTR3bits.AFGIEN = 1;                        // Enable the interrupt (set the IF flag)
+
     //*************************************************************************
     //**************************************************************************
     //*******************  Trigger  ********************************************
     //*******************  TMR9 Digital Compare 1/2, 3/4 ***********************
     //**************************************************************************
     //**************************************************************************
+    // timeout timer, at highest priority, TMR9
     IPC10bits.T9IP      = 7;
     IPC10bits.T9IS      = 0;
-            
+    
+    // Trigger ISRs, second threshold/Change notice
     IPC11bits.ADCDC2IP = 6;
     IPC11bits.ADCDC2IS = 0;
 
     IPC30bits.CNEIP    = 6;
     IPC30bits.CNEIS    = 0;
 
+    // 1st threashold ISR
     IPC11bits.ADCDC1IP = 5;
     IPC11bits.ADCDC1IS = 0;
+
+    IPC11bits.ADCDC1IP = 5;
+    IPC11bits.ADCDC1IS = 0;
+
+    // Log rollover ISR
+    IPC34bits.DMA4IP    = 4;
+    IPC34bits.DMA4IS    = 0;
+
+    IPC35bits.DMA6IP    = 4;
+    IPC35bits.DMA6IS    = 0;
+
+    // slow Log sample timers
+    IPC6bits.T5IP       = 5;
+    IPC6bits.T5IS       = 0;
+
+    IPC9bits.T8IP       = 5;
+    IPC9bits.T8IS       = 0;
+
+    // WiFi Module is at priority 3
     
 	// enable interrupts
     asm volatile("ei    %0" : "=r"(val));

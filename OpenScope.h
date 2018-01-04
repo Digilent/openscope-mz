@@ -50,10 +50,13 @@
 //#define SERIALBAUDRATE 500000
 //#define SERIALBAUDRATE 1000000
 #define SERIALBAUDRATE 1250000
+//#define SERIALBAUDRATE 2000000
 
 // what version of the calibration info we have
-#define CALVER  17   
-#define WFVER   8
+#define CALVER  17  // calibration file format version
+#define WFVER   8   // wifi file format version
+#define LOGFMT  1   // log file format version
+#define LOGREV  1   // log header revision number
 
 /************************************************************************/ 
 /************************************************************************/
@@ -63,13 +66,13 @@
 // This is a Macro so if you stop in the debugger, it will stop at
 // the location in code of the assert
 //static inline void ASSERT(bool f) 
-#define ASSERT(f)       \
-{                       \
-    if(!(f))            \
-    {                   \
-        LATJSET = 0x17; \
-        while(1);       \
-    }                   \
+#define ASSERT(f)                           \
+{                                           \
+    if(!(f))                                \
+    {                                       \
+        LATJSET = 0x17;                     \
+        while(PORTGbits.RG12 == 0);         \
+    }                                       \
 }                       
 
 #define NEVER_SHOULD_GET_HERE false
@@ -125,14 +128,6 @@
 #define SDWAITTIME 500      // how long to wait after sensing an sd insertion and mounting
  
 /************************************************************************/
-/********************** Timers ******************************************/
-/************************************************************************/
-#define TMRPBCLK                100000000               // PB CLK, ticks per second
-#define PSPERTMRPBCLKTICK       10000                   // there are 10^^12 ps/sec and 10^^8 ticks/sec or 10^^12 / 10^^8 == 10^^4 ps/tick
-#define ten2ten                 10000000000ull          // 10^^10
-#define ten2twelve              1000000000000ull        // 10^^12
-
-/************************************************************************/
 /********************** Core Timer **************************************/
 /************************************************************************/
 #define CORE_TMR_TICKS_PER_SEC (F_CPU / 2ul)
@@ -173,10 +168,22 @@ static inline void __attribute__((nomips16))  OSRestoreInterrupts(uint32_t st)
 /************************************************************************/
 /********************** Common Timer Values *****************************/
 /************************************************************************/
-#define MINTMRVALUE             32                      // for max sample rate on the ADC, what is the min timer prescaler (100,000,000 / 32) = 3,125,000 (max ADC rate).
-#define MAXTMRVALUE             65530                   // Max we will set the timer until we go to a single ADC
-#define MININTERLEAVEmHZ        2000000                 // below 2000 SPS we go to single ADCs
-#define PeriodToPRx(_Period)    ((_Period)-1)           // converting a Tmr value to a PRx match register value               
+#define TMRPBCLK                100000000               // PB CLK, ticks per second
+#define MAXTMRPRX               0x10000
+#define MAXTMRPRESCALER         256
+#define PeriodToPRx(_Period)    ((uint16_t) ((_Period)-1))  // converting a Tmr value to a PRx match register value    
+#define TMROCPULSE              4                           // how many ticks the timer or OC needs to be at its current state to ensure an INT when hit.
+
+#define PSPERTMRPBCLKTICK       10000                   // there are 10^^12 ps/sec and 10^^8 ticks/sec or 10^^12 / 10^^8 == 10^^4 ps/tick
+#define ten2ten                 10000000000ull          // 10^^10
+#define ten2twelve              1000000000000ull        // 10^^12
+
+#define GetTmrTicksFromPS(ps)   ((((uint64_t) ps) + PSPERTMRPBCLKTICK/2) / PSPERTMRPBCLKTICK)
+#define GetPSFromTmrTicks(tk)   (((uint64_t) (tk)) * PSPERTMRPBCLKTICK)
+
+// this is for our super slow timer we want some value that is an exact multiple of the TMRPBCLK to 
+// trigger and ISR that will then count down then then trigger a DMA for cell transfer
+#define TMRMINSPS              6   // 100,000,000 / 256 / 65536 ~=> 5.960464 Hz
 
 /************************************************************************/
 /********************** Analog Input ************************************/
@@ -191,6 +198,8 @@ static inline void __attribute__((nomips16))  OSRestoreInterrupts(uint32_t st)
 #define MAXmSAMPLEFREQ          6250000000ll            // max sample frequency in mHz - must be mult of 2 -- (100,000,000 / 32) * 2 = 6,250,000
 #define MINmSAMPLEFREQ          5961ll                  // min sample frequency in mHz 
 #define ADCpsDELAY              320000ll                // Full conversion time of the Dedicated ADCs in pico seconds.
+#define MININTERLEAVEmHZ        2000000                 // below 2000 SPS we go to single ADCs
+#define MINTMRVALUE             32                          // for max sample rate on the ADC, what is the min timer prescaler (100,000,000 / 32) = 3,125,000 (max ADC rate).
 
 // WARNING: Interleaving only works if the timer prescalar is set to 1:1 with the PB clock.
 // The timer event will occur 1 PB and 2 sysclocks after the PR match. With a PBCLK3 at 2:1, and a timer prescalar of 1:1, that
@@ -199,9 +208,12 @@ static inline void __attribute__((nomips16))  OSRestoreInterrupts(uint32_t st)
 // WARNING: however, the DMA will trigger off of the OC interrupt event, which is a match to RS
 // As documented the interrupt for the OC should occur one PB after the R match for the ADC and 1 PB after the RS match for the DMA
 // however there must be extra logic for the ADC as the ADC fires 3 PB after the R match, determined experimentally.
-#define INTERLEAVEPR(_Period)         ((_Period)-1)                 
-#define INTERLEAVEOC(_Period)         (((_Period)/2)-2)  
+#define INTERLEAVEPR(_Period)         PeriodToPRx(_Period)                 
+#define INTERLEAVEOC(_Period)         ((uint16_t) (((_Period)/2)-2))  
 
+/************************************************************************/
+/********************** DC Output ***************************************/
+/************************************************************************/
 #define mVDCChg     40                                  // The input can change by about 40mv
 #define DadcDCChg   (((40l * 1365l) + 500) / 1000l)     // The input can change by about 40mv
 #define DadcLimit   (2l * DadcDCChg)                    // stop looking when we get this close  
@@ -224,9 +236,10 @@ static inline void __attribute__((nomips16))  OSRestoreInterrupts(uint32_t st)
 // where pbx1000 is PB*100 = 100,000,000,000
 // pbx1000/AWGMAXBUF should be an even number say 100,000,000,000 / 25,000 = 4,000,000
 // our max freq is 1,000,000 which would yield a tmr of 4.
-#define AWGMAXBUF       25000l       // make this a mult of 2s and 5s as 100,000,000 == 5^^8 * 2^^8, we want to divide evenly
+#define AWGMAXBUF       25000l       // we want (pbx1000 / AWGMAXBUF) to divide evenly. -> 100,000,000,000 / 25,000 = 4,000,000; this is in awg.c
+#define AWGDMABUF       32766l       // once we have or sps and tmr values, we can allow the buffer to grow up to what the DMA can take (64K/sizeof(uint16_t) - 2)
 
-#define AWG_SETTLING_TIME   2           // 2ms is min
+#define AWG_SETTLING_TIME   2           // 2ms is min (35us simulated to stablize)
 #define HWDACSIZE   1024l
 
 
@@ -250,6 +263,35 @@ static inline void __attribute__((nomips16))  OSRestoreInterrupts(uint32_t st)
 #define LAMINmSPS       (5961ll)                    // How slow can the LA run, 100,000,000 / 256 / 65536 => PB / peScalar / PRx in mSPS
 #define LAPBCLK         100000000l                  // how fast is the LA PBclk
 #define LAOVERSHOOT     5                           // how many samples to over shoot in our timing, just to make sure we get valid data at the end, this must fit in the 128 sample slop
+
+/************************************************************************/
+/********************** LOG Parameters **********************************/
+/************************************************************************/
+#define LOGMAXFREQ      50000
+#define LOGuSPS         50000000000ll
+#define LOGPRx          MINTMRVALUE                     // run samplers at 3.125MS/s  
+#define LOGPSPRIME      (2 * ten2twelve / LOGMAXFREQ)   // how many ps to prime the ADC for Logging before taking aquisitions (2 log samples / 125 actual conversions at 3.125MS/s).
+#define LOGMAXTICKSBEFORESDSAVE (100 * CORE_TMR_TICKS_PER_MSEC)
+
+#define LOGPBCLK        AINPBCLK                        // PBCLK speed
+#define LOGDMASIZE      AINDMASIZE                      // # of elements in the buffer array (each element is 2 bytes) -- 64K BUG: DMA contoller freaks out if you transfer 64K, back off by a few bytes.
+#define LOGOVERSIZE     64                              // How much we oversize the sample buffer to ensure we can wrap and stop and get data, we need at least 2 samples slop at the begininning and AINOVERSHOOT and interupt time at the end. 
+#define LOGMAXBUFFSIZE  (LOGDMASIZE- LOGOVERSIZE)       // # of elements in the buffer array (each element is 2 bytes) -- 64K 
+#define LOGMAXBACKLOG   (LOGDMASIZE - LOGDMASIZE/6)     // around 26ks in time, if we exceed this than we probably overran the LOG input buffer (back log is too much); 
+//#define LOGMAXSECTORWRT (DFILE::FS_INFINITE_SECTOR_CNT) // How many sectors to write to the log file in one write.
+//#define LOGMAXSMPTORWRT 32768                       // something bigger than the number of samples in RAM
+#define LOGMAXSECTORWRT 5                               // How many sectors to write to the log file in one write.
+#define LOGMAXSMPTORWRT ((LOGMAXSECTORWRT * _FATFS_CBSECTOR_)/sizeof(uint16_t)) // how many samples we can write to a file in one shot
+#define LOGMAXFILESAMP  2147483136                      // FAT32 limits the File size to 4GB (2^^32) less our header divide by 2 (byts per sample).  (2^^32 - 512) / 2 == 2^^31 - 256 == 2147483392; less 256, a page, for just a little slop; this is used in the enum, do not put ull on it
+#define LOGMAXSECDELAY  18446744                        // used for limits check on how big our picoseconds can be and fit in an uint64 2^^64 / 10^^12 == 18,446,744
+
+/************************************************************************/
+/********************** TMR9 Completion Vectors *************************/
+/************************************************************************/
+// we should really be taking isr - ebase, but ebase is 0x9D000000, 
+// so just mask to the lower 18 bits, which is all the OFFxxx reg will pay attention to
+#define MakeVector(isr) (((uint32_t) (isr)) & 0x2FFFF)    
+#define SetVector(vec, isr)  (&OFF000)[vec] = MakeVector(isr)  
 
 // supported waveforms
 typedef enum
@@ -281,6 +323,9 @@ typedef enum
     OSC2_ID,
     OSC2_DC_ID,
     LOGIC1_ID,
+    ALOG1_ID,
+    ALOG2_ID,
+    DLOG1_ID,
     INSTR_END_ID,
     PWM1_ID,
     PWM2_ID,
@@ -300,6 +345,15 @@ typedef enum
     instrIDCal,
     instrIDCalSrc,
 } INSTR_ATT;
+
+typedef enum
+{
+    STCDNormal = 0,
+    STCDForce,
+    STCDError,
+    STCDOverflow,
+    STCDUnknown,
+} STCD;
 
 typedef enum
 {
@@ -340,6 +394,7 @@ typedef const void * HINSTR;
     extern const HINSTR         rgInstr[];              // instrument handles by inst ID
     extern char const * const   rgszInstr[];            // instrument name by inst ID ie. OSC1, AWG1 ....
     extern char const * const   rgCFGNames[];           // FAT FILE qualifyer by CFG Name .. ie. USER, MFG, TEMP
+    extern char const * const   rgVOLNames[];           // sd0, flash
     extern MACADDR              macOpenScope;           // my MAC address
     extern IPv4                 ipOpenScope;            // my IP address
     extern const char           szDefaultPage[];        // default home page string
@@ -355,8 +410,17 @@ typedef const void * HINSTR;
     // do some things up front.
     extern bool fModeJSON;
     extern bool fBlockIOBus;
-    extern uint32_t aveLoopTime;
 
+    // Loop status variables
+    extern uint32_t     tLoop;
+    extern uint32_t     aveLoopTime;
+    extern uint32_t     maxLoopTime;
+    extern uint32_t     minLoopTime;
+    extern uint32_t     maxLogWrite;
+    extern uint32_t     aveLogWrite;
+    extern uint32_t     cLogWrite;  
+    extern uint32_t     maxLogWrittenCnt;
+ 
     // static buffers used by the instruments
     extern uint32_t                                 trigAcqCount;
     extern int16_t      __attribute__((coherent))   rgOSC1Buff[AINBUFFSIZE];
@@ -384,6 +448,9 @@ typedef enum
     VOLNONE     = 0,
     VOLSD       = 1,
     VOLFLASH    = 2,
+    VOLRAM      = 3,    // this has no associated vol in the fat file system, but could
+    VOLCLOUD    = 4,    // this has no associated vol in the fat file system
+    VOLEND      = 5
 } VOLTYPE;
 
 typedef enum
@@ -431,10 +498,25 @@ typedef enum
     Run,
     ReRun,
 
+    OSJBSkipWhite,
+    OSJBSkipWhiteToEndOfChunk,
+    OSJBReadCount,
+    OSJBReadJSON,
+    OSJBReadNextBinary,
+    OSJBReadNextChunk,
+    OSJBCarrageReturn,
+    OSJBNewLine,
+    OSJBParseJSON,
+    OSJBReadBinary,
+    OSJBOutputJSON,
+    OSJBWriteChunkSize,
+    OSJBWriteOData,
+
     // Buffer lock states
     LOCKAvailable,
     LOCKAcq,
     LOCKOutput,
+    LOCKInput,
 
     // main loop states
     MSysInit,
@@ -459,10 +541,6 @@ typedef enum
     UIJSONWaitOSLEX,
     UIJSONWaitInput,
     UIJSONProcessJSON,
-    UIJSONWriteChunkSize,
-    UIJSONWriteJSON,
-    UIJSONWriteBinary,
-    UIJSONWriteBinaryEntry,
     UIJSONDone,
     
     // UI states
@@ -656,6 +734,7 @@ typedef enum
     OSPARSeparatedNameValue,
     OSPARErrObjectEnd,
     OSPARErrArrayEnd,
+    OSPARTopEndArray,
     OSPARTopObjEnd,
 
     // Endpoint
@@ -707,12 +786,11 @@ typedef enum
  
     // device
     OSPARDeviceArray,
-    OSPARDeviceEndArray,
     OSPARDeviceCmd,
     OSPARDeviceEndObject,
     OSPARDeviceEnmerate,
     OSPARDeviceEnterBootloader,
-    OSPARDeviceAveLoopTime,
+    OSPARDeviceLoopStats,
     OSPARDeviceStorageGetLocations,
     OSPARDeviceStorageLocation,
     OSPARDeviceResetInstruments,
@@ -751,6 +829,22 @@ typedef enum
     OSPARDeviceEndWiFiParam,
     OSPARDeviceEndWiFi,
 
+    // file
+    OSPARFileArray,
+    OSPARFileCmd,
+    OSPARFileStorageType,
+    OSPARFilePath,
+    OSPARFilePostion,
+    OSPARFileRequestedLength,
+    OSPARFileBinaryLength,
+    OSPARFileBinaryOffset,
+    OSPARFileRead,
+    OSPARFileWrite,
+    OSPARFileDelete,
+    OSPARFileMkdir,
+    OSPARFileListdir,
+    OSPARFileGetFileSize,
+    OSPARFileEndObject,
 
     // DC power Supply
     OSPARDCChannelObject,
@@ -833,6 +927,39 @@ typedef enum
     OSPARLaSetTrigDelay,
     OSPARLaBitMask,
     OSPARLaObjectEnd,
+
+    // data logging
+    OSPARLogObject,
+    OSPARLogAnalog,
+    OSPARLogDigital,
+    OSPARLogAnalogCh1,
+    OSPARLogAnalogCh2,
+    OSPARLogDigitalCh1,
+    OSPARLogAnalogCmd,
+    OSPARLogAnalogChEnd,
+    OSPARLogObjectEnd,
+    OSPARLogAnalogObjectEnd,
+
+    OSPARLogAnalogSetParams,
+    OSPARLogGetCurrentState,
+    OSPARLogConvertBuffer,
+    OSPARLogFinshRead,
+    OSPARLogAnalogCompleteParams,
+
+    OSPARLogMaxSampleCount,
+    OSPARLogSetOffset,
+    OSPARLogSetGain,
+    OSPARLogSetSampleFreq,
+    OSPARLogStartDelay,
+    OSPARLogOverflow,
+    OSPARLogStorageLocation,
+    OSPARLogURI,
+    OSPARLogStartIndex,
+    OSPARLogCount,
+
+    OSPARLogRead,
+    OSPARLogRun,
+    OSPARLogStop,
 
     // common JSPAR
     JSPARSetParm,
@@ -1005,6 +1132,10 @@ typedef enum
     InstrumentNotArmed              = (STATEError | STATEPredefined | 0x0000001D),  // 0xA000001D, --> 2684354589
     InstrumentNotArmedYet           = (STATEError | STATEPredefined | 0x0000001E),  // 0xA000001E, --> 2684354590
     NoSDCard                        = (STATEError | STATEPredefined | 0x0000001F),  // 0xA000001F, --> 2684354591
+    InstrumentNotConfigured         = (STATEError | STATEPredefined | 0x00000020),  // 0xA0000020, --> 2684354592
+    NoDataAvailable                 = (STATEError | STATEPredefined | 0x00000021),  // 0xA0000021, --> 2684354593
+    DirectoryDoesNotExist           = (STATEError | STATEPredefined | 0x00000022),  // 0xA0000022, --> 2684354594
+    StartIndexDoesNotExist          = (STATEError | STATEPredefined | 0x00000023),  // 0xA0000023, --> 2684354595
 } OPEN_SCOPE_STATES;
 
 /************************************************************************/
@@ -1033,9 +1164,19 @@ typedef enum
 
     LAFnRun,
 
+    ALogFnRun,
+
     WIFIFnManConnect,
     WIFIFnAutoConnect,
 } OPEN_SCOPE_FUNC;
+
+typedef struct _RCSIReg
+{
+    uint32_t    reg;
+    uint32_t    clr;
+    uint32_t    set;
+    uint32_t    inv;
+} RCSIReg;
 
 typedef struct _PORTCH
 {
@@ -1416,6 +1557,55 @@ typedef struct _OSC
 
 } OSC;
 
+typedef struct _ALOG
+{
+    COMHDR                                  comhdr;
+    OSC                 const *     const   posc;
+    struct _IOSC        const *     const   piosc;
+
+    // Triggering of ADC0 and ADC2; when running, we run both ADC channels wheter we need to or not
+    // this is because I must only run 1 filter at a time, so I need these sync'ed
+    TMRCH               volatile *  const   pTMRadc0;               // T3CON 
+    OCCH                volatile *  const   pOCadc2;                // OC5CON
+
+    // timer to use for sampling
+    TMRCH               volatile *  const   pTMRdmaSampl;           // TMR5/TMR8
+    RCSIReg             volatile *  const   pIECisrSample;          // IEC0/IEC1
+    RCSIReg             volatile *  const   pIFSisrSample;          // IFS0/IFS1
+    uint32_t                        const   isrSampleIEFMask;       // _IEC0_T5IE_MASK / _IEC1_T8IE_MASK
+    uint32_t                        const   dmaRollIEFMask;         // this is for DMA  IEC4/IFS4 -> _IEC4_DMA4IE_MASK / _IEC4_DMA6IE_MASK
+
+    __ADCFLTR1bits_t    volatile *  const   pFilter;
+    uint8_t                         const   tmrVector;
+    uint8_t                         const   fltVector;
+
+    int16_t             volatile __attribute__((coherent)) stableADCValue;      // conerent doesn't work in structures, but included for documentation.
+
+#ifdef __cplusplus
+    _ALOG(INSTR_ID id, OSC& oscC, struct _IOSC& iosc, volatile unsigned int& tmr, volatile unsigned int& iec, volatile unsigned int& ifs, uint32_t dmaSampleIEFMk, uint32_t dmaRollIEFMk, volatile unsigned int& flt, uint8_t const tmrVec, uint8_t const fltVec) :     
+            comhdr({{sizeof(struct _ALOG), CALVER, id, CFGUNCAL, {0,0,0,0,0,0}}, SMFnNone, Idle, 0, 0}),
+            posc(&oscC), piosc(&iosc), 
+            pTMRadc0((TMRCH *) &T3CON), pOCadc2((OCCH *) &OC5CON), 
+            pTMRdmaSampl((TMRCH *) &tmr), pIECisrSample((RCSIReg volatile * const) &iec), pIFSisrSample((RCSIReg volatile * const) &ifs), isrSampleIEFMask(dmaSampleIEFMk), dmaRollIEFMask(dmaRollIEFMk), 
+            pFilter((__ADCFLTR1bits_t *) &flt), tmrVector(tmrVec), fltVector(fltVec)
+    {
+    }
+#endif
+} ALOG;
+
+typedef struct _DLOG
+{
+    COMHDR              comhdr;
+    LA const * const    pla;
+
+#ifdef __cplusplus
+    _DLOG(INSTR_ID id, LA& laC) :       comhdr({{sizeof(struct _ALOG), CALVER, id, CFGUNCAL, {0,0,0,0,0,0}}, SMFnNone, Idle, 0, 0}),
+                                        pla(&laC)
+    {
+    }
+#endif
+} DLOG;
+
 #define MAX_OSC_AWG_SIZE        (sizeof(OSC) > sizeof(AWG) ? sizeof(OSC) : sizeof(AWG))
 #define MAX_OSC_AWG_DCVOLT_SIZE (MAX_OSC_AWG_SIZE > sizeof(DCVOLT) ? MAX_OSC_AWG_SIZE : sizeof(DCVOLT))
 #define MAX_INSTR_SIZE          (MAX_OSC_AWG_DCVOLT_SIZE > sizeof(LA) ? MAX_OSC_AWG_DCVOLT_SIZE : sizeof(LA))
@@ -1461,6 +1651,40 @@ typedef struct _WiFiConnectInfo
 
 } WiFiConnectInfo;
 
+typedef enum
+{
+    LogLittleEndian = 0x00,
+    LogBigEndian    = 0x01
+} LogEndian;
+
+typedef struct _LogHeader
+{
+    struct _AHdr
+    {
+        const uint8_t   endian;             // 0 - little endian 1 - big endian
+        const uint8_t   cbSampleEntry;      // how many bytes per sample, OpenScope = 2
+        const uint16_t  cbHeader;           // how long is this header structure
+        const uint16_t  cbHeaderInFile;     // how much space is taken in the file for the header, sector aligned (512)
+        const uint16_t  format;             // General format of the header and potential data
+        const uint32_t  revision;           // specific header revision (within the general format)
+        const uint64_t  voltageUnits;       // divide the voltage of each sample by this to get volts.
+              uint32_t  stopReason;         // reason for logging stopping; 0 = Normal, 1 = Forced, 2 = Error, 3 = Overflow, 4 = unknown
+              uint64_t  iStart;             // what sample index is the first index in the file, usually 0
+              uint64_t  actualCount;        // how many samples in the file.
+        const uint64_t  sampleFreqUnits;    // divide uSPS by sampleFreqUnits to get samples per second
+              uint64_t  uSPS;               // sample rate in micro samples / second
+        const uint64_t  delayUnits;         // divide psDelay by delayUnits to get the delay in seconds.
+              int64_t   psDelay;            // how many pico seconds a delay from the start of sampling until the first sample was taken, usually 0
+    } __attribute__((packed)) AHdr;
+    const uint8_t rgSize[512-sizeof(struct _AHdr)];
+
+#ifdef __cplusplus
+    _LogHeader() : AHdr({LogLittleEndian, sizeof(uint16_t), sizeof(struct _AHdr), sizeof(struct _LogHeader), LOGFMT, LOGREV, 1000ul, STCDError, 0, 0, 1000000ull, 1000000000, 1000000000000ull, 0}), rgSize{0}
+    {     
+    }
+#endif
+} __attribute__((packed)) LogHeader;
+
 #ifdef __cplusplus
 
     typedef struct _INSTRGRP
@@ -1469,7 +1693,6 @@ typedef struct _WiFiConnectInfo
         uint32_t                state2;         // state machine state
         uint32_t                tStart;         // a start time for waiting
         uint32_t                iInstr;         // index into instr and Usage arrays
-        DFILE&                  dFile;          // file handle for use
         uint32_t const          chInstr;        // how many instruments in the array
         INSTR_ATT const * const rgUsage;        // Instrument attribute
         HINSTR const * const    rghInstr;       // the array of instruments
@@ -1486,17 +1709,20 @@ typedef struct _WiFiConnectInfo
     extern OSSerial         Serial;
     extern uint8_t          uartBuff[512];
     extern INSTRGRP         instrGrp;
-   extern FLASHVOL         flashVol;
+    extern FLASHVOL         flashVol;
     extern DSDVOL           dSDVol;
     extern STATE            MState;
 
-  
 #endif // c++
 
     #include <Trigger.h>
-    #include <ProcessJSONCmd.h>
     #include <ParseOpenScope.h>   // OpenScope token parsing
- 
+
+#ifdef __cplusplus
+    extern OSPAR    oslex;
+#endif
+
+    #include <ProcessJSONCmd.h>
     extern PJCMD pjcmd;
 
 /************************************************************************/
@@ -1506,15 +1732,20 @@ typedef struct _WiFiConnectInfo
 /************************************************************************/
 #ifdef __cplusplus
     
-    extern STATE JSONCmdTask(void);
+    extern DFILE    dGFile;  
+    extern UICMD    uicmd;
 
-    extern OSPAR oslex;
+    extern STATE JSONCmdTask(void);
     extern STATE LEDTask(void);
+    extern STATE LoopStatsTask(void);
     extern STATE CFGSdHotSwapTask(void);
 
     extern STATE IOReadFile(DFILE& dFile, VOLTYPE const vol, char const * const szFileName, IDHDR& idhdr);
     extern STATE IOWriteFile(DFILE& dFile, VOLTYPE const vol, char const * const szFileName, IDHDR const & idhdr);
     extern STATE IOReadLine(char * szInput, uint32_t cb);
+
+    extern STATE IOReadFileN(DFILE& dFile, VOLTYPE const vol, char const * const szFileName, uint32_t iSeek, void *pOut, uint32_t cbMax, uint32_t * pcbRead);
+    extern STATE IOWriteFileN(DFILE& dFile, VOLTYPE const vol, char const * const szFileName, uint32_t iSeek, void const * pWrite, int32_t cbWrite, int32_t * pcbWritten);
 
     extern STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn);
     
@@ -1592,7 +1823,11 @@ extern "C" {
     extern STATE LARun(HINSTR hLA, ILA * pila);
     extern STATE LAReset(HINSTR hLA);
 
+    extern STATE ALOGRun(IALOG * pialog);
+    extern STATE ALOGStop(IALOG * pialog);
+
     extern bool CalculateBufferIndexes(BIDX * pbidx);
+    extern uint64_t CalculatePreScalarAndPeriod(uint64_t xsps, uint32_t scaleSPS, uint32_t const pbClk, uint16_t * pPreScalar, uint32_t * pPeriod, uint32_t * pCnt);
     extern bool ScrollBuffer(uint16_t rgBuff[], int32_t cBuff, int32_t iNew, int32_t iCur);
     
     #define OSCPWM(_pOSC, _gain, _mVOff) ((((_mVOff) * 1000l) + (_pOSC)->rgGCal[_gain].C + ((_pOSC)->rgGCal[_gain].B / 2)) / (_pOSC)->rgGCal[_gain].B)
@@ -1607,26 +1842,34 @@ extern "C" {
     extern bool TRGSingle(void);
     extern bool TRGForce(void);
 
+    extern bool TOStart(void);
+    extern bool TOInstrumentAdd(uint64_t ps, INSTR_ID id);
+    extern void TONullInstrument(INSTR_ID id);
+
     // all of the LA locking is so we don't run the AWG when the LA is running
     #define LockLA()        (DCH7DSA = KVA_2_PA(rgLOGICBuff))
     #define UnLockLA()      (DCH7DSA = KVA_2_PA(&LATH))
     #define IsLALocked()    (DCH7DSA == KVA_2_PA(rgLOGICBuff))
 
     // Instrument Idle macros
-    #define IsDCIdle()  (pjcmd.idcCh1.state.processing == Idle  && pjcmd.idcCh2.state.processing == Idle)
-    #define IsAWGIdle() (pjcmd.iawg.state.processing == Idle    || pjcmd.iawg.state.processing == Stopped)
+    #define IsDCxIdle(a)  ((a).state.processing == Idle)
+    #define IsDCIdle()  (IsDCxIdle(pjcmd.idcCh1) && IsDCxIdle(pjcmd.idcCh2))
+    #define IsAWGIdle() (pjcmd.iawg.state.processing == Idle || pjcmd.iawg.state.processing == Stopped || pjcmd.iawg.state.processing == JSPARAwgWaitingRegularWaveform || pjcmd.iawg.state.processing == JSPARAwgWaitingArbitraryWaveform)
     #define IsLAIdle()  ((pjcmd.ila.state.processing == Idle || pjcmd.ila.state.processing == Triggered || pjcmd.ila.state.processing == Waiting) && !IsLALocked())
-    #define IsOSCIdle() ((pjcmd.ioscCh1.state.processing == Idle  || pjcmd.ioscCh1.state.processing == Triggered || pjcmd.ioscCh1.state.processing == Waiting) && (pjcmd.ioscCh2.state.processing == Idle || pjcmd.ioscCh1.state.processing == Triggered || pjcmd.ioscCh2.state.processing == Waiting)) 
-    #define IsTrgIdle() (pjcmd.trigger.state.processing == Idle || pjcmd.trigger.state.processing == Triggered)
-    #define AreInstrumentsIdle()  (IsDCIdle() && IsLAIdle() && IsAWGIdle() && IsOSCIdle() && IsTrgIdle())
+    #define IsOSCxIdle(a) ((a).state.processing == Idle  || (a).state.processing == Triggered || (a).state.processing == Waiting)
+    #define IsOSCIdle()  (IsOSCxIdle(pjcmd.ioscCh1) &&  IsOSCxIdle(pjcmd.ioscCh2))
+    #define IsTrgIdle() (pjcmd.trigger.state.processing == Idle || pjcmd.trigger.state.processing == Waiting || pjcmd.trigger.state.processing == Triggered)
+    #define IsLogxIdle(a) ((a).state.processing == Idle || (a).state.processing == Waiting || (a).state.processing == Stopped)
+    #define IsLogIdle() (IsLogxIdle(pjcmd.iALog1) && IsLogxIdle(pjcmd.iALog2))
+    #define AreInstrumentsIdle()  (IsDCIdle() && IsLAIdle() && IsAWGIdle() && IsOSCIdle() && IsTrgIdle() && IsLogIdle())
  
     extern STATE HTTPSetup(void);
     extern void HTTPTask(void);
     extern bool HTTPEnable(bool fEnable);
     #define IsHTTPRunning() (HTTPState == HTTPEnabled && deIPcK.isIPReady())
     
-    extern int64_t GetSamples(int64_t psec, int64_t msps);
-    extern int64_t GetPicoSec(int64_t samp, int64_t msps);
+    extern int64_t GetSamples(int64_t psec, int64_t xsps, uint32_t scaleSPS);
+    extern int64_t GetPicoSec(int64_t samp, int64_t msps, uint32_t scaleSPS);
     
     extern t_deviceInfo     myMRFDeviceInfo;            // The MRF device info.
     extern STATE            HTTPState;

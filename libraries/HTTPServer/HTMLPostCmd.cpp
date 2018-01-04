@@ -18,16 +18,14 @@
 /*    HTML Strings                                                      */
 /************************************************************************/
 static const char szContentLength[] = "Content-Length: ";
-static const char szTerminateChunk[] = "\r\n0\r\n\r\n";
-
 
 /************************************************************************/
 /*    Static local variables                                            */
 /************************************************************************/
-static CLIENTINFO *     pClientMutex            = NULL;
-static uint32_t cbTotal = 0;
-static uint32_t cbContentLenght = 0;
-static uint32_t iBinary = 0;
+static CLIENTINFO *     pClientMutex        = NULL;
+static uint32_t         cbTotal             = 0;
+static uint32_t         cbContentLength     = 0;
+static bool             fFirstWrite         = true;
 
 /************************************************************************/
 /*    State machine states                                              */
@@ -38,8 +36,6 @@ typedef enum {
     JSONLEX,
     WRITEHTTP,
     WRITEJSON,
-    BINARYCHUNK,
-    WRITEBINARY,
     TERMINATECHUNK,
     JMPFILENOTFOUND,
     DONE
@@ -106,7 +102,7 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
             // found the content lengths
             else if(memcmp((uint8_t *) szContentLength, pClientInfo->rgbIn, sizeof(szContentLength)-1) == 0)
             {
-                cbContentLenght = atoi((char *) &pClientInfo->rgbIn[sizeof(szContentLength)-1]);
+                cbContentLength = atoi((char *) &pClientInfo->rgbIn[sizeof(szContentLength)-1]);
                 pClientInfo->htmlState = ENDHDR;
             }
             break;
@@ -133,7 +129,7 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
                 else retCMD = GCMD::READ;
 
                 // no content, just exit
-                if(cbContentLenght == 0)
+                if(cbContentLength == 0)
                 {
                     pClientInfo->htmlState = HTTPDISCONNECT;
                 }
@@ -141,9 +137,10 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
                 else
                 {
                     // get ready for lexing
-                    oslex.Init();
+                    oslex.Init(OSPAR::ICDStart);
                     oslex.fLocked = true;
                     cbTotal = 0;
+                    fFirstWrite = true;
                     pClientInfo->cbWrite = 0;
                     pClientInfo->htmlState = JSONLEX;
                 }
@@ -156,7 +153,7 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
 
         case JSONLEX:
 
-            switch(oslex.StreamJSON((const char *) pClientInfo->rgbIn, pClientInfo->cbRead))
+            switch(oslex.StreamOS((const char *) pClientInfo->rgbIn, pClientInfo->cbRead))
             {
 
                 case GCMD::READ:
@@ -165,7 +162,7 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
                     cbTotal += pClientInfo->cbRead;
 
                     // is this all we are going to get
-                    if(cbTotal >= cbContentLenght) 
+                    if(cbTotal >= cbContentLength) 
                     {
                         // setting this to 0 will tell the lexer there is no more
                         pClientInfo->cbRead = 0;
@@ -179,15 +176,36 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
                     }
                     break;
 
+                case GCMD::WRITE:
+                    if(fFirstWrite)
+                    {
+                        fFirstWrite = false;
+                        pClientInfo->htmlState = WRITEHTTP;
+                        retCMD = GCMD::CONTINUE;
+                    }
+                    else
+                    {
+                        pClientInfo->cbWrite    = oslex.cbOutput;
+                        pClientInfo->pbOut      = oslex.pbOutput;
+                        retCMD = GCMD::WRITE;
+                    }
+
+                    break;
+
                 case GCMD::DONE:
-                case GCMD::ERROR:
                     // we are done, go put out the response
-                    pClientInfo->htmlState = WRITEHTTP;
+                    fFirstWrite = true;
+                    pClientInfo->htmlState = HTTPDISCONNECT;
                     retCMD = GCMD::CONTINUE;
                     break;
 
-                // continue
+                case GCMD::CONTINUE:
+                    retCMD = GCMD::CONTINUE;
+                    break;
+
+                // never should get this
                 default:
+                    ASSERT(NEVER_SHOULD_GET_HERE); 
                     break;
 
             }
@@ -198,34 +216,41 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
             // if there is binary to write out.
             if(oslex.cOData > 1)
             {
-                uint32_t i = 0;
+                uint32_t cbT = 0;
                 uint32_t cb = 0;
-                char szcbJSON[32];
-                char szcbBinary[32];
+                int32_t i = 0;
 
-                // create the length of the JSON part of the message
-                utoa(oslex.odata[0].cb, szcbJSON, 16);
-                cb = strlen(szcbJSON);
-                szcbJSON[cb++] = '\r';
-                szcbJSON[cb++] = '\n';
-                pClientInfo->cbWrite = cb;
+                // we need to caluculate the content length
+                // it will be the sum of the output plus
+                // the chunk sizes (in hex), plus \r\n
 
-                // calculate the total size of the binary to follow
-                cb = 0;
-                for(i=1; i<oslex.cOData; i++) cb += oslex.odata[i].cb;
+                // sum up all of the blocks
+                for(i=0; i<oslex.cOData; i++) cbT += oslex.odata[i].cb;
 
-                utoa(cb, szcbBinary, 16);           // size of binary
-                cb += strlen(szcbBinary) + 2;       // size of binary count with \r\n
-                cb += oslex.odata[0].cb + 2;        // size of json with \r\n
-                cb += pClientInfo->cbWrite;         // size of json count
-                cb += sizeof(szTerminateChunk)-1;   // size of terminator
+                // The first chunk is the JSON, the second chunk is the rest of the binary
+                // do the binary first, because cbT has the sum of all parts
+                cb = cbT -  oslex.odata[0].cb;
+
+                // now see how many digits it has, base 16
+                for(i=0; cb>0; i++,cb>>=4);
+                if(i==0) i = 1; // this should never happen
+                cbT += i;
+
+                // now do for the first chunk, the JSON chunk
+                cb = oslex.odata[0].cb;
+                for(i=0; cb>0; i++,cb>>=4);
+                if(i==0) i = 1; // this should never happen
+                cbT += i;
+
+                // now we have to add all of the \r\n
+                // each chunk is terminated with  a \r\n (there are 2 of them)
+                // each count is terminate with a \r\n (there are 2 of them)
+                // there is a zero lenght chunk at the end (1 zero char, and 2 \r\n)
+                // in effect there are 3 chunks each with 2 \r\n (or 12 bytes) + the zero char (13 bytes)
+                cbT += 13;
 
                 // create the header
-                cb = BuildHTTPOKStr(true, cb, ".osjb", (char *) pClientInfo->rgbScratch, sizeof(pClientInfo->rgbScratch));
-
-                // add the JSON string after the header
-                memcpy(&pClientInfo->rgbScratch[cb], szcbJSON, pClientInfo->cbWrite);
-                pClientInfo->cbWrite += cb; // add the JSON count size on to the header size
+                pClientInfo->cbWrite  = BuildHTTPOKStr(true, cbT, ".osjb", (char *) pClientInfo->rgbScratch, sizeof(pClientInfo->rgbScratch));
 
                 // push this out on the network the header and JSON count
                 pClientInfo->pbOut = pClientInfo->rgbScratch;
@@ -237,90 +262,43 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
                 pClientInfo->cbWrite = BuildHTTPOKStr(true, oslex.odata[0].cb, ".json", (char *) pClientInfo->rgbScratch, sizeof(pClientInfo->rgbScratch));
                 pClientInfo->pbOut = pClientInfo->rgbScratch;
             }
+
             pClientInfo->htmlState = WRITEJSON;
             retCMD = GCMD::WRITE;
-
             break;
 
         case WRITEJSON:
 
-            // index 0 is always the JSON
-            pClientInfo->cbWrite = oslex.odata[0].cb;
-            pClientInfo->pbOut = oslex.odata[0].pbOut;
+            // Put out what came back for LEX and return there 
+            pClientInfo->cbWrite    = oslex.cbOutput;
+            pClientInfo->pbOut      = oslex.pbOutput;
+            retCMD = GCMD::WRITE;
 
-            // see if we have binary too
-            if(oslex.cOData > 1) pClientInfo->htmlState = BINARYCHUNK;
-            else pClientInfo->htmlState = HTTPDISCONNECT;
+            pClientInfo->htmlState = JSONLEX;
 
             // write it out
             retCMD = GCMD::WRITE;
             break;
 
-        // Create the chuck size for the binary
-        case BINARYCHUNK:
-            {
-                uint32_t i = 0;
-                uint32_t cb = 0;
-
-                // terminate the json chunk
-                pClientInfo->cbWrite = 0;
-                pClientInfo->rgbScratch[pClientInfo->cbWrite++] = '\r';
-                pClientInfo->rgbScratch[pClientInfo->cbWrite++] = '\n';
-
-                // calculate the total size of the binary to follow
-                for(i=1; i<oslex.cOData; i++) cb += oslex.odata[i].cb;
-
-                // create the length of the JSON part of the message
-                utoa(cb, (char *) &pClientInfo->rgbScratch[pClientInfo->cbWrite], 16);
-                pClientInfo->cbWrite += strlen((char *) &pClientInfo->rgbScratch[pClientInfo->cbWrite]);
-                pClientInfo->rgbScratch[pClientInfo->cbWrite++] = '\r';
-                pClientInfo->rgbScratch[pClientInfo->cbWrite++] = '\n';
-                pClientInfo->pbOut = pClientInfo->rgbScratch;
-
-                iBinary = 1;
-                pClientInfo->htmlState = WRITEBINARY;
-                retCMD = GCMD::WRITE;
-            }
-            break;
-
-        case WRITEBINARY:
-
-            // put out this block
-            pClientInfo->cbWrite = oslex.odata[iBinary].cb;
-            pClientInfo->pbOut = oslex.odata[iBinary].pbOut;
-            iBinary++;
-
-            if(iBinary >= oslex.cOData) pClientInfo->htmlState = TERMINATECHUNK;
-            
-            // Write out this binary
-            retCMD = GCMD::WRITE;
-            break;
-
-        case TERMINATECHUNK:
-
-            // put out the chunk terminator
-            pClientInfo->cbWrite = sizeof(szTerminateChunk)-1;
-            pClientInfo->pbOut = (uint8_t *) szTerminateChunk;
-            pClientInfo->htmlState = HTTPDISCONNECT;
-            retCMD = GCMD::WRITE;
-            break;
-
         case JMPFILENOTFOUND:
+
             Serial.println("Jumping to HTTP File Not Found page");
             pClientMutex = NULL;
-            oslex.Init();
+            oslex.Init(OSPAR::ICDEnd);
             return(JumpToComposeHTMLPage(pClientInfo, ComposeHTTP404Error));
             break;
 
         case HTTPTIMEOUT:
+
             Serial.println("Timeout error occurred, closing the session");
 
             // fall thru to close
 
         case HTTPDISCONNECT:
+
             if(pClientMutex == pClientInfo)
             {
-                uint32_t i;
+                int32_t i;
                 
                 for(i=0; i<oslex.cOData; i++)
                 {
@@ -331,7 +309,7 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
                 }
 
                 // we are no longer parsing JSON
-                oslex.Init();
+                oslex.Init(OSPAR::ICDEnd);
 
                 if(pjcmd.trigger.state.parsing == JSPARTrgRead) 
                 {
@@ -345,6 +323,7 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
 
         case DONE:
         default:
+
             pClientInfo->cbWrite    = 0;
             retCMD                  = GCMD::DONE;
             break;

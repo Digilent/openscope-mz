@@ -15,14 +15,6 @@
 #include <OpenScope.h>
 
 
-
-void 
-__attribute__((nomips16)) _simple_tlb_refill_exception_handler (void)
-{
-    LATJSET = 0x16;     
-  __builtin_software_breakpoint();  
-}
-
 /************************************************************************/
 /*                   Examples of interrupt routines:                    */
 /*                                                                      */
@@ -302,7 +294,9 @@ void __attribute__((nomips16, at_vector(_ADC_DC2_VECTOR),interrupt(IPL6SRS))) Tr
 // lets assume we can only do 1 instruction per tick
 // how many instructions should we allow for to complete our work
 #define nbrTickTooCloseToMove  20l
-void __attribute__((nomips16, at_vector(_TIMER_9_VECTOR),interrupt(IPL7SRS))) TrigISRQuit(void)
+// void __attribute__((nomips16, at_vector(_TIMER_9_VECTOR),interrupt(IPL7SRS))) TrigISRQuit(void)
+// void __attribute__((nomips16, at_vector(VECTRIG),interrupt(IPL7SRS))) TrigISRQuit(void)
+void __attribute__((nomips16, interrupt(IPL7SRS), section(".user_interrupt"))) TrigISRQuit(void)
 {
     volatile int32_t iTMR;
     uint32_t cTMR;
@@ -322,27 +316,8 @@ void __attribute__((nomips16, at_vector(_TIMER_9_VECTOR),interrupt(IPL7SRS))) Tr
     cTMR = 0;
     while(cTMR == 0 && iTMR <= 0)
     {
-        // who is the target
-        switch(pjcmd.trigger.rgtte[pjcmd.trigger.iTTE].instrID)
-        {
-            case OSC1_ID:
-                T3CONCLR = _T3CON_ON_MASK;                  // Stop taking DMA samples on the ADC0/1 channel
-                break;
 
-            case OSC2_ID:
-                T5CONCLR = _T5CON_ON_MASK;                  // Stop taking DMA samples on the ADC2/3 channel
-                break;
-
-            case LOGIC1_ID:
-                T7CONCLR = _T7CON_ON_MASK;                  // Stop taking DMA samples on the LA channel
-                break;
-
-            default:
-                ASSERT(NEVER_SHOULD_GET_HERE);
-                TRGAbort();
-                return;
-                break;
-        }
+        StopInstrumentTimer(pjcmd.trigger.rgtte[pjcmd.trigger.iTTE].instrID);
 
         // go to the next target
         pjcmd.trigger.iTTE++;
@@ -508,7 +483,10 @@ bool TRGSetUp(void)
     T9CON           = 0;                    
     T9CONbits.TCKPS = 0;        // pre scalar of zero
     PR9 = 0xFFFF;               // max roll buffer of 65536 count
-          
+
+    // Make sure we have the Trigger ISR placed
+    SetVector(_TIMER_9_VECTOR, TrigISRQuit);
+
     // clear Digital compare registers and delay timer
     ADCCMP1 = 0;
     ADCCMPEN1 = 0; 
@@ -527,6 +505,12 @@ bool TRGSetUp(void)
     IFS1CLR     = _IFS1_ADCDC2IF_MASK;  
     IEC3CLR     = _IEC3_CNEIE_MASK;
     IFS3CLR     = _IFS3_CNEIF_MASK;
+
+    // and make sure the Data logger  ISRs are all disabled
+    IEC0CLR  = _IEC0_T5IE_MASK;  
+    IEC4CLR  = _IEC4_DMA4IE_MASK;
+    IEC1CLR  = _IEC1_T8IE_MASK;  
+    IEC4CLR  = _IEC4_DMA6IE_MASK;
 
     // set the trigger condition
     switch(pjcmd.trigger.idTrigSrc)

@@ -31,10 +31,10 @@ uint32_t uVNUSB      = 5000000;
 /************************************************************************/
 // not in JSON mode
 bool fModeJSON = false;
-uint32_t aveLoopTime = 0;
 
 // the JSON command structure
 PJCMD pjcmd = PJCMD();
+UICMD uicmd = UICMD();
 OSPAR oslex = OSPAR();
 
 /************************************************************************/
@@ -96,18 +96,31 @@ static const HINSTR hOSC1 = HINSTRFromInstr(osc1Data);
 static OSC osc2Data = OSC(OSC2_ID);
 static const HINSTR hOSC2 = HINSTRFromInstr(osc2Data);
 
+static ALOG alog1Data = ALOG(ALOG1_ID, osc1Data, pjcmd.ioscCh1, T5CON, IEC0, IFS0,_IEC0_T5IE_MASK, _IEC4_DMA4IE_MASK, ADCFLTR2, _TIMER_5_VECTOR, _ADC_DF2_VECTOR);
+static const HINSTR hALOG1 = HINSTRFromInstr(alog1Data);
+
+static ALOG alog2Data = ALOG(ALOG2_ID, osc2Data, pjcmd.ioscCh2, T8CON, IEC1, IFS1,_IEC1_T8IE_MASK, _IEC4_DMA6IE_MASK, ADCFLTR3, _TIMER_8_VECTOR, _ADC_DF3_VECTOR);
+static const HINSTR hALOG2 = HINSTRFromInstr(alog2Data);
+
+static DLOG dlog1Data = DLOG(DLOG1_ID, laData);
+static const HINSTR hDLOG1 = HINSTRFromInstr(dlog1Data);
+
+
 // very carefully constructed... this is just a list of instruments to be calibrated
 // however.... if you are calibrating a OSC, you must follow it with the DC output that 
 // is connected to it. For best results, you should ensure the DC outputs are calibrated first,
 // that is either previousely calibrated, or calibrated earlier in the list of instruments to calibrate.
 // The DC instruments specified immedately after the OSC, will not be calibrated, they are just
 // used to calibrate the OSC.
-static DFILE            dCfgFile;              // Create a File handle to use to open files with
-static const INSTR_ATT  rgUsage[INSTR_END_ID]       = {instrIDNone, instrIDCal,  instrIDCal, instrIDCal, instrIDCal, instrIDCalSrc, instrIDCal,     instrIDCalSrc,  instrIDNone};
-const HINSTR            rgInstr[INSTR_END_ID]       = {NULL,        hDC1Volt,    hDC2Volt,   hAWG,       hOSC1,      hDC1Volt,      hOSC2,          hDC2Volt,       hLA};
-char const * const      rgszInstr[END_ID]           = {"NONE",      "DCOUT1",    "DCOUT2",   "AWG1",     "OSC1",     "OSC1DC1",     "OSC2",        "OSC2DC2",       "LA1",
+DFILE                   dGFile;              // Create a File handle to use to open files with
+DFILE                   dLFile1;             // Create a File handle to use with Logging
+DFILE                   dLFile2;             // Create a File handle to use with Logging
+
+static const INSTR_ATT  rgUsage[INSTR_END_ID]       = {instrIDNone, instrIDCal,  instrIDCal, instrIDCal, instrIDCal, instrIDCalSrc, instrIDCal,     instrIDCalSrc,  instrIDNone,    instrIDNone,    instrIDNone,    instrIDNone};
+const HINSTR            rgInstr[INSTR_END_ID]       = {NULL,        hDC1Volt,    hDC2Volt,   hAWG,       hOSC1,      hDC1Volt,      hOSC2,          hDC2Volt,       hLA,            hALOG1,         hALOG2,         hDLOG1};
+char const * const      rgszInstr[END_ID]           = {"NONE",      "DCOUT1",    "DCOUT2",   "AWG1",     "OSC1",     "OSC1DC1",     "OSC2",        "OSC2DC2",       "LA1",          "ALOG1",        "ALOG2",        "DLOG1",
                                                        "NONE","NONE","NONE","NONE","NONE","NONE","WFPARM","EXT-TRG","FORCE-TRG"};
-INSTRGRP                instrGrp = {Idle, Idle, 0, 0, dCfgFile, INSTR_END_ID, rgUsage, rgInstr};
+INSTRGRP                instrGrp = {Idle, Idle, 0, 0, INSTR_END_ID, rgUsage, rgInstr};
 
 /************************************************************************/
 /************************************************************************/
@@ -153,7 +166,7 @@ uint32_t const oscInitData[2][12] =
 };
 
 char const * const rgCFGNames[CFGEND] = {"NONE", "UNCALIBRATED", "flash", "sd0", "CALIBRATED"};
-
+char const * const rgVOLNames[VOLEND] = {"NONE", "sd0", "flash", "ram", "cloud"};
 //************************************************************************
 //*	This sets the MPIDE version number in the image header as defined in the linker script
 extern const uint32_t _verMPIDE_Stub;

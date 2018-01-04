@@ -13,7 +13,6 @@
 /************************************************************************/
 #include    <OpenScope.h>
 static const char szModeJSON[] = "{\"mode\":\"JSON\"}";
-static const char szTerminateChunk[] = "\r\n0\r\n\r\n";
 
 STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn)
 {
@@ -35,11 +34,8 @@ STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn)
 
     // for write output to the COM port
     static STATE    stateNext = Idle;
-    static uint8_t *   pbOutput = NULL;
+    static uint8_t const * pbOutput = NULL;
     static int32_t  cbOutput = 0;
-//    static int32_t  cbWritten = 0;
-    static char     szChunk[32];
-    static uint32_t iodata = 0;
 
     // for setting gain
     static HINSTR   hInstrt = NULL;
@@ -147,6 +143,10 @@ STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn)
             break;
 
         case UIWriteOutput:
+
+            // we can't DMA more than 65536-2 (the -2 is to prevent freakout mode in the DMA)
+            ASSERT(cbOutput < 65534);
+
             if(Serial.writeBuffer(pbOutput, cbOutput, &DCH1CON))
             {
                 state = UIWriteDone;
@@ -170,7 +170,7 @@ STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn)
             {
                 szInput[0] = Serial.read();
 
-                if(oslex.IsOSCmdStart(szInput[0]) == OSPAR::JSON)
+                if(oslex.IsOSCmdStart(szInput[0]) != OSPAR::NONE)
                 {
                     cbInput = 1;
                     state = UIJSONWaitOSLEX;
@@ -181,13 +181,19 @@ STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn)
 
         case UIJSONWaitOSLEX:
 
+#if 0       // debug to collect more char before proceeding
+            {
+                uint32_t tStart = ReadCoreTimer();
+                while(ReadCoreTimer() - tStart < 200 * CORE_TMR_TICKS_PER_MSEC);
+            }
+#endif
             // keep collecting data
             while(Serial.available() > 0 && cbInput < sizeof(szInput)) szInput[cbInput++] = Serial.read();
 
             // see if we can parse
             if(!oslex.fLocked)
             {
-                oslex.Init();
+                oslex.Init(OSPAR::ICDStart);
                 oslex.fLocked = true;
                 state = UIJSONProcessJSON;  // we know we have at least '{'
             }
@@ -201,9 +207,9 @@ STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn)
                 state = UIJSONProcessJSON;      
             }
             break;
-
+                        
         case UIJSONProcessJSON:
-            switch(oslex.StreamJSON(szInput, cbInput))
+            switch(oslex.StreamOS(szInput, cbInput))
             {
                 case GCMD::READ:
                     state = UIJSONWaitInput;
@@ -217,23 +223,16 @@ STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn)
                     // fall thru
 
                 case GCMD::DONE:
-
-                    // if this is chunked data, put the chunk out
-                    if(oslex.cOData > 1) 
-                    {
-                        cbOutput = oslex.odata[0].cb;
-                        stateNext = UIJSONWriteJSON;
-                        state = UIJSONWriteChunkSize;
-                    }
-
-                    // this is just JSON
-                    else 
-                    {
-                        state = UIJSONWriteJSON;
-                    }
+                    state = UIJSONDone;
+                    break;
+             
+                case GCMD::WRITE:
+                    cbOutput = oslex.cbOutput;
+                    pbOutput = oslex.pbOutput;
+                    stateNext = UIJSONProcessJSON;
+                    state = UIWriteOutput;
                     break;
 
-                    
                 // continue
                 default:
                     break;
@@ -241,81 +240,10 @@ STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn)
             }
             break;
 
-        case UIJSONWriteChunkSize:
-            if(stateNext == UIJSONDone)
-            {
-                pbOutput = (uint8_t *) szTerminateChunk;
-                cbOutput = sizeof(szTerminateChunk) - 1;
-            }
-            else
-            {
-                // create the length of the JSON part of the message
-                utoa(cbOutput, szChunk, 16);
-                cbOutput = strlen(szChunk);
-                szChunk[cbOutput++] = '\r';
-                szChunk[cbOutput++] = '\n';
-                pbOutput = (uint8_t *) szChunk;
-            }
-
-            // write it out
-            state = UIWriteOutput;     
-            break;
-
-        case UIJSONWriteJSON:
-
-            // if we are doing chunks
-            if(oslex.cOData > 1) 
-            {
-                // all chunks end with a \r\n
-                ASSERT(oslex.odata[0].pbOut == (uint8_t *) oslex.rgchOut);
-                oslex.odata[0].pbOut[oslex.odata[0].cb++] = '\r';
-                oslex.odata[0].pbOut[oslex.odata[0].cb++] = '\n';
-
-                // then we need to write the binary out
-                stateNext = UIJSONWriteBinary;
-            }
-            else 
-            {
-                stateNext = UIJSONDone;
-            }
-
-            // write out the JSON
-            cbOutput = oslex.odata[0].cb;
-            pbOutput = oslex.odata[0].pbOut;
-            state = UIWriteOutput;
-            break;
-
-        case UIJSONWriteBinary:
-            iodata = 1;
-            cbOutput = 0;
-            for(uint32_t i=1; i<oslex.cOData; i++) cbOutput += oslex.odata[i].cb;
-            stateNext = UIJSONWriteBinaryEntry;
-            state = UIJSONWriteChunkSize;
-            break;
-
-        case UIJSONWriteBinaryEntry:
-
-            if(iodata < oslex.cOData)
-            {
-                cbOutput = oslex.odata[iodata].cb;
-                pbOutput = oslex.odata[iodata].pbOut;
-                stateNext = UIJSONWriteBinaryEntry;
-                state = UIWriteOutput;
-                iodata++;
-            }
-            else
-            {
-                // put out the final zero size chunk
-                cbOutput = 0;
-                stateNext = UIJSONDone;
-                state = UIJSONWriteChunkSize;
-            }
-            break;
-
         case UIJSONDone:
 
             // Unlock all of the buffers
-            for(uint32_t i=0; i<oslex.cOData; i++)
+            for(int32_t i=0; i<oslex.cOData; i++)
             {
                 if(oslex.odata[i].pLockState != NULL && *oslex.odata[i].pLockState == LOCKOutput)
                 {
@@ -324,7 +252,7 @@ STATE UIMainPage(DFILE& dFile, VOLTYPE const wifiVol, WiFiConnectInfo& wifiConn)
             }
 
             // we are no longer parsing JSON
-            oslex.Init();
+            oslex.Init(OSPAR::ICDEnd);
 
             // get out of JSON mode
             if(fModeJSON)
@@ -1612,3 +1540,180 @@ STATE IOReadLine(char * szInput, uint32_t cb)
 
     return(state);
 }
+
+
+
+// Note, you can dynamically update iSeek/*pcbRead if you want to reuse the pOut buffer as you go.
+// so by increading iSeek and decreasing *pcbRead data is written earlier in the buffer.
+// the buffer size needs to be larger than the sectors read in order to ensure you don't finish before reading the whole file.
+STATE IOReadFileN(DFILE& dFile, VOLTYPE const vol, char const * const szFileName, uint32_t iSeek, void *pOut, uint32_t cbMax, uint32_t * pcbRead)
+{
+    static STATE state = Idle;
+    uint8_t * pData = (uint8_t *) pOut;
+    FRESULT fr = FR_OK;
+
+    switch(state)
+    {
+        case Idle:
+            if(pcbRead != NULL) *pcbRead = 0;
+            if(dFile)
+            {
+                return(FileInUse);
+            }
+            else if((fr = DFATFS::fschdrive(DFATFS::szFatFsVols[vol])) != FR_OK || (fr = DFATFS::fschdir(DFATFS::szRoot)) != FR_OK)
+            {
+                return(fr | STATEError);
+            }
+            else if((fr = dFile.fsopen(szFileName, FA_READ)) != FR_OK)
+            {
+                return(fr | STATEError);
+            }
+            else if(iSeek >= dFile.fssize())
+            {
+                dFile.fsclose();
+                return(ValueOutOfRange);
+            }
+            else if((fr = dFile.fslseek(iSeek)) != FR_OK)
+            {
+                dFile.fsclose();
+                return(fr | STATEError);
+            }
+            state = IORead;
+            break;
+
+        case IORead:
+            {
+                uint32_t cbTotal    = min((dFile.fssize() - iSeek), cbMax); 
+                uint32_t iBuff      = dFile.fstell() - iSeek;
+                uint32_t cbToRead   = cbTotal - iBuff;
+                uint32_t cbRead     = 0;
+
+                // if we are done
+                if(cbToRead == 0)
+                {
+                    dFile.fsclose();
+                    state = Idle;
+                    return(Idle);
+                }
+                else if(cbToRead > DFILE::FS_DEFAULT_BUFF_SIZE)
+                {
+                    cbToRead = DFILE::FS_DEFAULT_BUFF_SIZE;
+                }
+
+                // in more data
+                if((fr = dFile.fsread(&pData[iBuff], cbToRead, &cbRead)) != FR_OK)
+                {
+                    dFile.fsclose();
+                    state = Idle;
+                    return(fr | STATEError);
+                }
+
+                // update the read counts
+                (*pcbRead) += cbRead;
+
+                // if done, get out
+                if((*pcbRead) == cbTotal)
+                {
+                    dFile.fsclose();
+                    state = Idle;
+                    return(Idle);
+                }
+            }
+            break;
+
+        default:
+            state = Idle;
+            dFile.fsclose();
+            return(IOVolError);
+            break;
+
+    }
+
+    return(state);
+}
+
+
+// got until you send a cbWrite == 0, that will close the file
+// iSeek must always == the filepointer, we don't support dynamic file positions
+// First call should return IOWrite is all is good
+STATE IOWriteFileN(DFILE& dFile, VOLTYPE const vol, char const * const szFileName, uint32_t iSeek, void const * pWrite, int32_t cbWrite, int32_t * pcbWritten)
+{
+    static STATE state = Idle;
+    uint8_t const * const pData   = (uint8_t const * const) pWrite;
+    FRESULT fr = FR_OK;
+
+    switch(state)
+    {
+        case Idle:
+            if(pcbWritten != NULL) (*pcbWritten) = 0;
+            if(dFile)
+            {
+                return(FileInUse);
+            }
+            else if((fr = DFATFS::fschdrive(DFATFS::szFatFsVols[vol])) != FR_OK || (fr = DFATFS::fschdir(DFATFS::szRoot)) != FR_OK)
+            {
+                return(fr | STATEError);
+            }
+            else if((fr = dFile.fsopen(szFileName, FA_CREATE_ALWAYS | FA_WRITE | FA_READ)) != FR_OK)    // FA_OPEN_ALWAYS if you don't want to wipe out the old file
+            {
+                return(fr | STATEError);
+            }
+            else if((fr = dFile.fslseek(iSeek)) != FR_OK)
+            {
+                dFile.fsclose();
+                return(fr | STATEError);
+            }
+
+            state = IOWrite;
+            break;
+
+        case IOWrite:
+            {
+                if(pcbWritten != NULL) (*pcbWritten) = 0;
+
+                // this should only happen if Idle, someone is jumping in.
+                if(pWrite == NULL)
+                {
+                    return(FileInUse);
+                }
+
+                // if we are done
+                else if(cbWrite == 0)
+                {
+                    dFile.fsclose();                                       
+                    state = Idle;
+                    return(Idle);
+                }
+                else if(iSeek != dFile.fstell())   
+                {
+                    dFile.fsclose();
+                    state = Idle;
+                    return(ValueOutOfRange);
+                }
+                else if(cbWrite > (int32_t) DFILE::FS_DEFAULT_BUFF_SIZE)
+                {
+                    cbWrite = DFILE::FS_DEFAULT_BUFF_SIZE;
+                }
+
+                // write out some data
+                if((fr = dFile.fswrite(pData, cbWrite, (uint32_t *) pcbWritten)) != FR_OK)
+                {
+                    dFile.fsclose();
+                    state = Idle;
+                    return(fr | STATEError);
+                }
+            }
+            break;
+
+        default:
+            state = Idle;
+            dFile.fsclose();
+            return(IOVolError);
+            break;
+    }
+
+    return(state);
+}
+
+
+

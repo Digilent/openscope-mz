@@ -48,10 +48,27 @@
 
 #ifdef __cplusplus
 
+#if 0   
+
+// assert if we have errors
+#include "p32xxxx.h"
+#define STOP                            \
+{                                       \
+        LATJSET = 0x17;                 \
+        while(PORTGbits.RG12 == 0);     \
+}   
+
+//extern UINT tLogFileWrite;
+//static UINT tFFStart;
+#endif
+
+#define MAXTIME(_a,_b) {_a = (_ReadCoreTimer() - _a) / tmsTicksPerUS; if(_a > _b) _b = _a;}
+
 #include "../DFATFS/DFATFS.h"
 #include "../DSPI/DSPI.h"           // required for the interface DGSPI
                                     // if board_Defs uses a macro to define a SoftSPI
-#define sdSpiFast           4000000
+//#define sdSpiFast           4000000         // this works reliably
+#define sdSpiFast           25000000      // the slowest card out there is class 2 or 2MB/s or 16Mb/s we should be able to run at near 16MHz
 #define sdSpiSlow           400000
 
 #define	FCLK_SLOW()		dSDspi.setSpeed(sdSpiSlow)	/* Set slow clock (100k-400k) */
@@ -70,7 +87,7 @@
 #define CMD8   (8)			/* SEND_IF_COND */
 #define CMD9   (9)			/* SEND_CSD */
 #define CMD10  (10)			/* SEND_CID */
-#define CMD12  (12)			/* STOP_TRANSMISSION */
+#define CMD12  (12)			/* STOP_TRANSMISSION; return busy*/
 #define ACMD13 (13|0x80)	/* SD_STATUS (SDC) */
 #define CMD16  (16)			/* SET_BLOCKLEN */
 #define CMD17  (17)			/* READ_SINGLE_BLOCK */
@@ -84,9 +101,11 @@
 #define CMD58  (58)			/* READ_OCR */
 
 // Timer definitions
+#define tmsTicksPerMS (F_CPU / 2000ul)
+#define tmsTicksPerUS (tmsTicksPerMS / 1000ul)
 #define tmsDefineTimer(a) uint32_t tStart##a, tTimeout##a
-#define tmsSetTimer(a) tStart##a = _ReadCoreTimerMS(); tTimeout##a
-#define tmsTimer(a) ((_ReadCoreTimerMS() - tStart##a) < tTimeout##a)
+#define tmsSetTimer(a) tStart##a = _ReadCoreTimer(); tTimeout##a
+#define tmsTimer(a) (((_ReadCoreTimer() - tStart##a) / tmsTicksPerMS) < tTimeout##a)
 
 class DSDVOL : public DFSVOL
 {
@@ -99,20 +118,21 @@ class DSDVOL : public DFSVOL
         // variables used by the MMC/SD
         volatile DSTATUS    Stat;	
         uint32_t            CardType;
+        uint32_t            tBusyStart;         // Diagnostic
+        uint32_t            cBusyInARow;        // Diagnostic
         tmsDefineTimer(1);
         tmsDefineTimer(2);
 
         // make default constructor illegal to use
         DSDVOL();
         
-        uint32_t inline _ReadCoreTimerMS(void)
+        uint32_t inline _ReadCoreTimer(void)
         {
-            const uint32_t cTickPerMillisecond = F_CPU / 2000ul;
             uint32_t coreTimerCount;
             
             __asm__ __volatile__("mfc0 %0,$9" : "=r" (coreTimerCount));
             
-            return((coreTimerCount + (cTickPerMillisecond/2)) / cTickPerMillisecond);
+            return(coreTimerCount);
         }
 
         // internal SD implementation
@@ -138,8 +158,11 @@ class DSDVOL : public DFSVOL
         uint8_t send_cmd (uint8_t cmd, uint32_t arg);
 
     public:
+        
+        uint32_t tBusyMax;  // Diagnostics, the maximum busy time, could be as high as 500ms
+        uint32_t maxBusyInARow;  // Diagnostics, the maximum in a row busy count
 
-        DSDVOL(DGSPI& dspi) : DFSVOL(0,1), dSDspi(dspi), Stat(STA_NOINIT) {}
+        DSDVOL(DGSPI& dspi) : DFSVOL(0,1), dSDspi(dspi), Stat(STA_NOINIT), tBusyStart(0), cBusyInARow(0), tBusyMax(0), maxBusyInARow(0) {}
 
         DSTATUS disk_initialize (void);
         DSTATUS disk_status (void);

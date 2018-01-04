@@ -373,8 +373,8 @@ STATE AWGSetCustomWaveform(HINSTR hAWG, int16_t rgWaveform[], uint32_t cWaveform
         case Idle:       
             {
                 uint32_t i = 0;
-                int32_t mvMax = rgWaveform[0];
-                int32_t mvMin = rgWaveform[0];
+                int32_t mvMax = -AWGMAXP2P;
+                int32_t mvMin = AWGMAXP2P;
                 int16_t mvTblOffset = 0;
                 
                 if(pAWG->pTMR->TxCON.ON)
@@ -513,21 +513,29 @@ uint32_t AWGCalculateBuffAndSps(uint32_t reqFreqmHz, uint32_t * pcBuff, uint32_t
     // you can't have a bigger buffer because we can't push data out faster
     // with a buffer size of 25,000 and sample rate of 10,000,000 
     // we can use slower sample rate at 400 Hz
-    else if(((((uint64_t) AWGMAXSPS) * 1000ull + (reqFreqmHz/2)) / reqFreqmHz) < (uint64_t) AWGMAXBUF)
+    else if((*pcBuff = (uint32_t) ((((uint64_t) AWGMAXSPS) * 1000ull + (reqFreqmHz/2)) / reqFreqmHz)) <= ((uint32_t) AWGMAXBUF))
     {
         // the cutoff freq for here is 400 Hz
         *pSps = AWGMAXSPS;                                       // samples per sec
-        *pcBuff = (uint32_t) ((((uint64_t) AWGMAXSPS) * 1000ull + (reqFreqmHz/2)) / reqFreqmHz);             // size of buffer              
+//        *pcBuff = (uint32_t) ((((uint64_t) AWGMAXSPS) * 1000ull + (reqFreqmHz/2)) / reqFreqmHz);             // size of buffer              
     }
     // PB = (buff)(tmr)(freq)
     // use the maximum buffer size to use the fastest clock
     // this is from 400Hz down to 40uHz
     else
     {
-        uint64_t pbx1000000 = ((uint64_t) AWGPBCLK) * 1000000ull;
-        uint32_t tmr        = (uint32_t) (((pbx1000000 / reqFreqmHz / AWGMAXBUF) + 500) / 1000); 
-        *pcBuff             = (uint32_t) (((pbx1000000 / reqFreqmHz / tmr) + 500) / 1000);        // buffer size   
-        *pSps               = ((*pcBuff) * (uint64_t) reqFreqmHz + 500) / 1000;                             // samples per second
+        const uint64_t pbx1000              = AWGPBCLK * 1000ull;
+        uint32_t tmr                        = (uint32_t) (((pbx1000 / AWGMAXBUF) + (reqFreqmHz/2)) / reqFreqmHz); 
+
+        // if we have a tmr overflow, put it at the max
+        if(tmr > 65536)         tmr         = 65536;
+
+        *pSps                               = (AWGPBCLK + (tmr/2)) / tmr;
+        if(*pSps > AWGMAXSPS)   *pSps       = AWGMAXSPS;
+
+        *pcBuff                             = (uint32_t) ((((uint64_t) *pSps) * 1000ll + (reqFreqmHz/2)) / reqFreqmHz);
+        if(*pcBuff > AWGDMABUF) *pcBuff     = AWGDMABUF;
+
     }
 
     // sps = freq * cbuff

@@ -122,8 +122,16 @@
 #include "fs_ff.h"			/* Declarations of FatFs API */
 #include "fs_diskio.h"		/* Declarations of disk I/O functions */
 
-
-
+#if 0                      // assert if we have errors
+#include "p32xxxx.h"
+#define STOP       \
+{                       \
+        LATJSET = 0x17; \
+        while(1);       \
+}   
+#else
+#define STOP
+#endif
 
 /*--------------------------------------------------------------------------
 
@@ -1051,7 +1059,6 @@ DWORD create_chain (	/* 0:No free cluster, 1:Internal error, 0xFFFFFFFF:Disk err
 {
 	DWORD cs, ncl, scl;
 	FRESULT res;
-
 
 	if (clst == 0) {		/* Create a new chain */
 		scl = fs->last_clust;			/* Get suggested start point */
@@ -2681,7 +2688,6 @@ FRESULT f_write (
 	const BYTE *wbuff = (const BYTE*)buff;
 	BYTE csect;
 
-
 	*bw = 0;	/* Clear write byte counter */
 
 	res = validate(fp);						/* Check validity */
@@ -2779,7 +2785,7 @@ FRESULT f_write (
 
 	if (fp->fptr > fp->fsize) fp->fsize = fp->fptr;	/* Update file size if needed */
 	fp->flag |= FA__WRITTEN;						/* Set file change flag */
-
+    
 	LEAVE_FF(fp->fs, FR_OK);
 }
 
