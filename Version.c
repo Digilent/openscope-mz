@@ -15,7 +15,7 @@
 
 // verison
 #define VER_MAJOR 1
-#define VER_MINOR 296
+#define VER_MINOR 301
 #define VER_PATCH 0
 
 #define MKSTR2(a) #a

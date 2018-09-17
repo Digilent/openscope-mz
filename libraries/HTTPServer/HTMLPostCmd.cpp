@@ -100,7 +100,7 @@ GCMD::ACTION ComposeHTMLPostCmd(CLIENTINFO * pClientInfo)
             }
 
             // found the content lengths
-            else if(memcmp((uint8_t *) szContentLength, pClientInfo->rgbIn, sizeof(szContentLength)-1) == 0)
+            else if(strncasecmp(szContentLength, (char *) pClientInfo->rgbIn, sizeof(szContentLength)-1) == 0)
             {
                 cbContentLength = atoi((char *) &pClientInfo->rgbIn[sizeof(szContentLength)-1]);
                 pClientInfo->htmlState = ENDHDR;
